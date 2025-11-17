@@ -24,8 +24,8 @@ class BleGattServerController(
         fun onDataReceived(data: ByteArray)
     }
 
-    // Service UUID - using a custom UUID for this example
-    private val SERVICE_UUID = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB")
+    // Service UUID - can be set by user
+    private var serviceUuid: UUID = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB")
     
     // Characteristic UUIDs
     private val READ_WRITE_CHARACTERISTIC_UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
@@ -42,7 +42,7 @@ class BleGattServerController(
 
         override fun initializeServer(): List<BluetoothGattService> {
             // Create GATT service
-            val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+            val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
             // Create read/write characteristic
             val readWriteCharacteristic = BluetoothGattCharacteristic(
@@ -96,6 +96,16 @@ class BleGattServerController(
 
     val connectedClientCount: Int
         get() = connectedClients.size
+
+    fun setServiceUuid(uuid: UUID) {
+        if (isServerRunning) {
+            // Cannot change UUID while server is running
+            return
+        }
+        serviceUuid = uuid
+    }
+
+    fun getServiceUuid(): UUID = serviceUuid
 
     fun startServer(): Boolean {
         if (isServerRunning) {

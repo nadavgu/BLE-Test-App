@@ -26,6 +26,7 @@ import com.google.android.material.navigation.NavigationView
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
+import java.util.UUID
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
@@ -54,23 +55,25 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var gattServerAddressText: TextView
     private lateinit var gattServerConnectedClientsText: TextView
     private lateinit var gattServerDataReceivedText: TextView
+    private lateinit var gattServerUuidInput: com.google.android.material.textfield.TextInputEditText
+    private lateinit var gattServerUuidLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var toggleGattServerButton: MaterialButton
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private val resultsAdapter = ScanResultAdapter()
-    
+
     // Track smoothed RSSI values for each device
     private val smoothedRssiMap = mutableMapOf<String, Double>()
-    
+
     // Track current device order to preserve it when not sorting
     private var currentDeviceOrder = listOf<ScannedDevice>()
 
     private lateinit var bleRequirements: BleRequirements
     private lateinit var scannerController: BleScannerController
     private lateinit var gattServerController: BleGattServerController
-    
+
     private var receivedDataHistory = StringBuilder()
-    
+
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
     private val sortRunnable = Runnable {
@@ -120,7 +123,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         stopBleScan()
         gattServerController.stopServer()
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         // Clean up handler to prevent leaks
@@ -142,7 +145,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         emptyStateCard = scanView.findViewById(R.id.emptyStateCard)
         toggleScanButton = scanView.findViewById(R.id.toggleScanButton)
         recyclerView = scanView.findViewById(R.id.scanResultsRecyclerView)
-        
+
         configureRecyclerView()
         toggleScanButton.setOnClickListener {
             if (scannerController.isScanning) {
@@ -159,8 +162,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         gattServerAddressText = gattServerView.findViewById(R.id.gattServerAddressText)
         gattServerConnectedClientsText = gattServerView.findViewById(R.id.gattServerConnectedClientsText)
         gattServerDataReceivedText = gattServerView.findViewById(R.id.gattServerDataReceivedText)
+        gattServerUuidInput = gattServerView.findViewById(R.id.gattServerUuidInput)
+        gattServerUuidLayout = gattServerView.findViewById(R.id.gattServerUuidLayout)
         toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
-        
+
+        // Initialize UUID input with current UUID
+        gattServerUuidInput.setText(gattServerController.getServiceUuid().toString())
+
         toggleGattServerButton.setOnClickListener {
             if (gattServerController.isRunning) {
                 gattServerController.stopServer()
@@ -337,7 +345,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         } catch (_: SecurityException) {
             result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
         }
-        
+
         // Calculate smoothed RSSI using exponential smoothing
         val rawRssi = result.rssi.toDouble()
         val currentSmoothedRssi = smoothedRssiMap[address]
@@ -349,7 +357,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             rawRssi
         }
         smoothedRssiMap[address] = smoothedRssi
-        
+
         val scannedDevice = ScannedDevice(
             address = address,
             name = name,
@@ -359,12 +367,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             lastSeen = System.currentTimeMillis()
         )
         scanResults[address] = scannedDevice
-        
+
         // Update UI immediately but debounce sorting
         updateDeviceList(updateSort = false)
         scheduleSort()
     }
-    
+
     private fun scheduleSort() {
         if (!pendingSort) {
             pendingSort = true
@@ -372,11 +380,11 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             handler.postDelayed(sortRunnable, SORT_DEBOUNCE_MS)
         }
     }
-    
+
     private fun performSort() {
         updateDeviceList(updateSort = true)
     }
-    
+
     private fun updateDeviceList(updateSort: Boolean) {
         val devices = if (updateSort) {
             // Re-sort by smoothed RSSI
@@ -389,10 +397,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             currentDeviceOrder.map { oldDevice ->
                 deviceMap[oldDevice.address] ?: oldDevice
             }.filter { scanResults.containsKey(it.address) } +
-            // Add any new devices that weren't in the current order
-            scanResults.values.filterNot { device ->
-                currentDeviceOrder.any { it.address == device.address }
-            }
+                    // Add any new devices that weren't in the current order
+                    scanResults.values.filterNot { device ->
+                        currentDeviceOrder.any { it.address == device.address }
+                    }
         }
         currentDeviceOrder = devices
         resultsAdapter.submitDevices(devices)
@@ -431,6 +439,22 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             }
             else -> {
+                // Validate and set UUID
+                val uuidString = gattServerUuidInput.text?.toString()?.trim() ?: ""
+                if (uuidString.isEmpty()) {
+                    gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
+                    return
+                }
+
+                try {
+                    val uuid = UUID.fromString(uuidString)
+                    gattServerController.setServiceUuid(uuid)
+                    gattServerUuidLayout.error = null
+                } catch (e: IllegalArgumentException) {
+                    gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
+                    return
+                }
+
                 // Disable button while starting to prevent multiple attempts
                 toggleGattServerButton.isEnabled = false
                 if (!gattServerController.startServer()) {
@@ -522,12 +546,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         } else {
             getString(R.string.gatt_server_status_stopped)
         }
-        
+
         val address = gattServerController.getServerAddress() ?: "Unknown"
         gattServerAddressText.text = "Address: $address"
-        
+
         val clientCount = gattServerController.connectedClientCount
         gattServerConnectedClientsText.text = getString(R.string.gatt_server_connected_clients, clientCount)
+
+        // Enable/disable UUID input based on server state
+        gattServerUuidInput.isEnabled = !running
     }
 }
 

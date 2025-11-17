@@ -28,4 +28,7 @@
     <string name="gatt_server_connected_clients">Connected clients: %1$d</string>
     <string name="gatt_server_data_title">Received Data</string>
     <string name="gatt_server_error">Server error (code %1$d)</string>
+    <string name="gatt_server_uuid_title">Service UUID</string>
+    <string name="gatt_server_uuid_hint">Enter service UUID (e.g., 0000180F-0000-1000-8000-00805F9B34FB)</string>
+    <string name="gatt_server_uuid_invalid">Invalid UUID format</string>
 </resources>
