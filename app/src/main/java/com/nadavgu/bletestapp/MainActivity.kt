@@ -6,32 +6,48 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.MenuItem
+import android.view.View
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.navigation.NavigationView
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 
-class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
+class MainActivity : AppCompatActivity(), BleScannerController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
     companion object {
         private const val SORT_DEBOUNCE_MS = 1_500L // Re-sort every 1.5 seconds
         private const val RSSI_SMOOTHING_ALPHA = 0.3 // Exponential smoothing factor (0.0-1.0)
     }
 
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navigationView: NavigationView
+    private lateinit var toolbar: MaterialToolbar
+    private lateinit var contentFrame: FrameLayout
+
+    // Scan view components
+    private lateinit var scanView: View
     private lateinit var statusText: TextView
     private lateinit var progressIndicator: CircularProgressIndicator
     private lateinit var emptyStateCard: MaterialCardView
     private lateinit var toggleScanButton: MaterialButton
     private lateinit var recyclerView: RecyclerView
+
+    // GATT Server view
+    private lateinit var gattServerView: View
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private val resultsAdapter = ScanResultAdapter()
@@ -73,20 +89,14 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_scan)
+        setContentView(R.layout.activity_main)
         bleRequirements = BleRequirements(this)
         scannerController = BleScannerController(this, bleRequirements)
         bindViews()
         configureToolbar()
-        configureRecyclerView()
+        setupViews()
+        showScanView()
         updateUiForScanState()
-        toggleScanButton.setOnClickListener {
-            if (scannerController.isScanning) {
-                stopBleScan()
-            } else {
-                onStartScanClicked()
-            }
-        }
     }
 
     override fun onStart() {
@@ -105,21 +115,48 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
     }
 
     private fun bindViews() {
-        statusText = findViewById(R.id.scanStatusText)
-        progressIndicator = findViewById(R.id.scanProgressIndicator)
-        emptyStateCard = findViewById(R.id.emptyStateCard)
-        toggleScanButton = findViewById(R.id.toggleScanButton)
-        recyclerView = findViewById(R.id.scanResultsRecyclerView)
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navigationView = findViewById(R.id.navigationView)
+        toolbar = findViewById(R.id.mainToolbar)
+        contentFrame = findViewById(R.id.contentFrame)
+    }
+
+    private fun setupViews() {
+        // Inflate scan view
+        scanView = layoutInflater.inflate(R.layout.view_scan, contentFrame, false)
+        statusText = scanView.findViewById(R.id.scanStatusText)
+        progressIndicator = scanView.findViewById(R.id.scanProgressIndicator)
+        emptyStateCard = scanView.findViewById(R.id.emptyStateCard)
+        toggleScanButton = scanView.findViewById(R.id.toggleScanButton)
+        recyclerView = scanView.findViewById(R.id.scanResultsRecyclerView)
+        
+        configureRecyclerView()
+        toggleScanButton.setOnClickListener {
+            if (scannerController.isScanning) {
+                stopBleScan()
+            } else {
+                onStartScanClicked()
+            }
+        }
+
+        // Inflate GATT server view
+        gattServerView = layoutInflater.inflate(R.layout.view_gatt_server, contentFrame, false)
+
+        // Setup navigation
+        navigationView.setNavigationItemSelectedListener(this)
     }
 
     private fun configureToolbar() {
-        val toolbar: MaterialToolbar = findViewById(R.id.scanToolbar)
         setSupportActionBar(toolbar)
+        toolbar.setNavigationIcon(R.drawable.ic_menu)
+        toolbar.setNavigationOnClickListener {
+            drawerLayout.openDrawer(GravityCompat.START)
+        }
     }
 
     private fun configureRecyclerView() {
         recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@ScanActivity)
+            layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = resultsAdapter
             // Disable item animations to prevent flickering during RSSI updates
             itemAnimator = null
@@ -130,6 +167,40 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
                 )
             )
         }
+    }
+
+    override fun onNavigationItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.menu_scan -> {
+                showScanView()
+                drawerLayout.closeDrawer(GravityCompat.START)
+                return true
+            }
+            R.id.menu_gatt_server -> {
+                showGattServerView()
+                drawerLayout.closeDrawer(GravityCompat.START)
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun showScanView() {
+        toolbar.title = getString(R.string.scan_title)
+        contentFrame.removeAllViews()
+        contentFrame.addView(scanView)
+        // Update menu selection
+        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = true
+        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = false
+    }
+
+    private fun showGattServerView() {
+        toolbar.title = getString(R.string.gatt_server_title)
+        contentFrame.removeAllViews()
+        contentFrame.addView(gattServerView)
+        // Update menu selection
+        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = false
+        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = true
     }
 
     private fun onStartScanClicked() {
