@@ -3,6 +3,8 @@ package com.nadavgu.bletestapp
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +22,11 @@ import no.nordicsemi.android.support.v18.scanner.ScanResult
 
 class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
 
+    companion object {
+        private const val SORT_DEBOUNCE_MS = 1_500L // Re-sort every 1.5 seconds
+        private const val RSSI_SMOOTHING_ALPHA = 0.3 // Exponential smoothing factor (0.0-1.0)
+    }
+
     private lateinit var statusText: TextView
     private lateinit var progressIndicator: CircularProgressIndicator
     private lateinit var emptyStateCard: MaterialCardView
@@ -28,9 +35,22 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private val resultsAdapter = ScanResultAdapter()
+    
+    // Track smoothed RSSI values for each device
+    private val smoothedRssiMap = mutableMapOf<String, Double>()
+    
+    // Track current device order to preserve it when not sorting
+    private var currentDeviceOrder = listOf<ScannedDevice>()
 
     private lateinit var bleRequirements: BleRequirements
     private lateinit var scannerController: BleScannerController
+    
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingSort = false
+    private val sortRunnable = Runnable {
+        performSort()
+        pendingSort = false
+    }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
@@ -81,6 +101,12 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
         super.onStop()
         stopBleScan()
     }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up handler to prevent leaks
+        handler.removeCallbacks(sortRunnable)
+    }
 
     private fun bindViews() {
         statusText = findViewById(R.id.scanStatusText)
@@ -99,6 +125,8 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
         recyclerView.apply {
             layoutManager = LinearLayoutManager(this@ScanActivity)
             adapter = resultsAdapter
+            // Disable item animations to prevent flickering during RSSI updates
+            itemAnimator = null
             addItemDecoration(
                 DividerItemDecoration(
                     context,
@@ -153,12 +181,16 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
             return
         }
         scanResults.clear()
+        smoothedRssiMap.clear()
+        currentDeviceOrder = emptyList()
         resultsAdapter.submitDevices(emptyList())
         updateUiForScanState()
     }
 
     private fun stopBleScan() {
         scannerController.stopScan()
+        handler.removeCallbacks(sortRunnable)
+        pendingSort = false
         updateUiForScanState()
     }
 
@@ -205,20 +237,71 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
 
     private fun addOrUpdateResult(result: ScanResult) {
         val device = result.device
+        val address = device.address
         val name = try {
             device.name ?: result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
         } catch (_: SecurityException) {
             result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
         }
+        
+        // Calculate smoothed RSSI using exponential smoothing
+        val rawRssi = result.rssi.toDouble()
+        val currentSmoothedRssi = smoothedRssiMap[address]
+        val smoothedRssi = if (currentSmoothedRssi != null) {
+            // Exponential smoothing: new = alpha * raw + (1 - alpha) * old
+            RSSI_SMOOTHING_ALPHA * rawRssi + (1 - RSSI_SMOOTHING_ALPHA) * currentSmoothedRssi
+        } else {
+            // First time seeing this device, use raw value
+            rawRssi
+        }
+        smoothedRssiMap[address] = smoothedRssi
+        
         val scannedDevice = ScannedDevice(
-            address = device.address,
+            address = address,
             name = name,
-            rssi = result.rssi,
+            rssi = result.rssi, // Raw RSSI for display
+            smoothedRssi = smoothedRssi, // Smoothed RSSI for sorting
             isConnectable = result.isConnectable,
             lastSeen = System.currentTimeMillis()
         )
-        scanResults[device.address] = scannedDevice
-        resultsAdapter.submitDevices(scanResults.values.toList())
+        scanResults[address] = scannedDevice
+        
+        // Update UI immediately but debounce sorting
+        updateDeviceList(updateSort = false)
+        scheduleSort()
+    }
+    
+    private fun scheduleSort() {
+        if (!pendingSort) {
+            pendingSort = true
+            handler.removeCallbacks(sortRunnable)
+            handler.postDelayed(sortRunnable, SORT_DEBOUNCE_MS)
+        }
+    }
+    
+    private fun performSort() {
+        updateDeviceList(updateSort = true)
+    }
+    
+    private fun updateDeviceList(updateSort: Boolean) {
+        val devices = if (updateSort) {
+            // Re-sort by smoothed RSSI
+            scanResults.values.toList().sortedByDescending { it.smoothedRssi }
+        } else {
+            // Preserve current order, just update the data
+            // Create a map for quick lookup
+            val deviceMap = scanResults.values.associateBy { it.address }
+            // Update items in current order with new data
+            currentDeviceOrder.map { oldDevice ->
+                deviceMap[oldDevice.address] ?: oldDevice
+            }.filter { scanResults.containsKey(it.address) } +
+            // Add any new devices that weren't in the current order
+            scanResults.values.filterNot { device ->
+                currentDeviceOrder.any { it.address == device.address }
+            }
+        }
+        currentDeviceOrder = devices
+        resultsAdapter.submitDevices(devices)
         emptyStateCard.isVisible = scanResults.isEmpty() && !scannerController.isScanning
     }
 
