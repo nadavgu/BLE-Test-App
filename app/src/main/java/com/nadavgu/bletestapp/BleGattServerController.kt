@@ -14,6 +14,7 @@ class BleGattServerController(
     private val context: Context,
     private val listener: Listener
 ) {
+    private val bleRequirements = BleRequirements(context)
 
     interface Listener {
         fun onServerStarted()
@@ -151,6 +152,9 @@ class BleGattServerController(
     }
 
     fun getServerAddress(): String? {
+        if (!bleRequirements.hasAllPermissions()) {
+            return null
+        }
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val bluetoothAdapter = bluetoothManager?.adapter
         return bluetoothAdapter?.address
