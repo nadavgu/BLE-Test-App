@@ -1,3 +1,20 @@
 <resources>
     <string name="app_name">BLE Test App</string>
+    <string name="scan_title">Nearby BLE Devices</string>
+    <string name="scan_status_scanning">Scanning for devices…</string>
+    <string name="scan_status_idle">Tap start to scan for BLE devices</string>
+    <string name="scan_empty_state">No BLE devices found yet. Start a scan to populate this list.</string>
+    <string name="scan_start_button">Start scanning</string>
+    <string name="scan_stop_button">Stop scanning</string>
+    <string name="scan_error_permission_denied">Bluetooth permissions are required to scan.</string>
+    <string name="scan_open_settings_button">Settings</string>
+    <string name="scan_error_bluetooth_disabled">Bluetooth is disabled. Please enable it to continue.</string>
+    <string name="scan_error_generic">Scanning failed (code %1$d)</string>
+    <string name="scan_settings_button">Settings</string>
+    <string name="scan_unknown_device">Unknown device</string>
+    <string name="scan_item_rssi">%1$d dBm</string>
+    <string name="scan_item_connectable_true">Connectable</string>
+    <string name="scan_item_connectable_false">Not connectable</string>
+    <string name="scan_stop_before_exit">Stop scanning before leaving</string>
+    <string name="scan_error_ble_not_supported">This device does not support Bluetooth Low Energy.</string>
 </resources>
