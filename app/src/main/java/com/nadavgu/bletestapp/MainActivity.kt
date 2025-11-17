@@ -1,6 +1,7 @@
 package com.nadavgu.bletestapp
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.AdvertiseCallback
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -26,7 +27,7 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 
-class MainActivity : AppCompatActivity(), BleScannerController.Listener, NavigationView.OnNavigationItemSelectedListener {
+class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
     companion object {
         private const val SORT_DEBOUNCE_MS = 1_500L // Re-sort every 1.5 seconds
@@ -46,8 +47,14 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
     private lateinit var toggleScanButton: MaterialButton
     private lateinit var recyclerView: RecyclerView
 
-    // GATT Server view
+    // GATT Server view components
     private lateinit var gattServerView: View
+    private lateinit var gattServerStatusText: TextView
+    private lateinit var gattServerProgressIndicator: CircularProgressIndicator
+    private lateinit var gattServerAddressText: TextView
+    private lateinit var gattServerConnectedClientsText: TextView
+    private lateinit var gattServerDataReceivedText: TextView
+    private lateinit var toggleGattServerButton: MaterialButton
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private val resultsAdapter = ScanResultAdapter()
@@ -60,6 +67,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
 
     private lateinit var bleRequirements: BleRequirements
     private lateinit var scannerController: BleScannerController
+    private lateinit var gattServerController: BleGattServerController
+    
+    private var receivedDataHistory = StringBuilder()
     
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
@@ -92,11 +102,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
         setContentView(R.layout.activity_main)
         bleRequirements = BleRequirements(this)
         scannerController = BleScannerController(this, bleRequirements)
+        gattServerController = BleGattServerController(this, this)
         bindViews()
         configureToolbar()
         setupViews()
         showScanView()
         updateUiForScanState()
+        updateGattServerUi()
     }
 
     override fun onStart() {
@@ -106,6 +118,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
     override fun onStop() {
         super.onStop()
         stopBleScan()
+        gattServerController.stopServer()
     }
     
     override fun onDestroy() {
@@ -141,6 +154,20 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
 
         // Inflate GATT server view
         gattServerView = layoutInflater.inflate(R.layout.view_gatt_server, contentFrame, false)
+        gattServerStatusText = gattServerView.findViewById(R.id.gattServerStatusText)
+        gattServerProgressIndicator = gattServerView.findViewById(R.id.gattServerProgressIndicator)
+        gattServerAddressText = gattServerView.findViewById(R.id.gattServerAddressText)
+        gattServerConnectedClientsText = gattServerView.findViewById(R.id.gattServerConnectedClientsText)
+        gattServerDataReceivedText = gattServerView.findViewById(R.id.gattServerDataReceivedText)
+        toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
+        
+        toggleGattServerButton.setOnClickListener {
+            if (gattServerController.isRunning) {
+                gattServerController.stopServer()
+            } else {
+                onStartGattServerClicked()
+            }
+        }
 
         // Setup navigation
         navigationView.setNavigationItemSelectedListener(this)
@@ -385,6 +412,122 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, Navigat
                 Snackbar.LENGTH_LONG
             ).show()
         }
+    }
+
+    // GATT Server Controller Listener
+    private fun onStartGattServerClicked() {
+        when {
+            !bleRequirements.isBleSupported() -> {
+                Snackbar.make(
+                    gattServerView,
+                    R.string.scan_error_ble_not_supported,
+                    Snackbar.LENGTH_LONG
+                ).show()
+            }
+            !bleRequirements.hasAllPermissions() -> {
+                permissionLauncher.launch(bleRequirements.requiredRuntimePermissions())
+            }
+            !bleRequirements.isBluetoothEnabled() -> {
+                enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            }
+            else -> {
+                // Disable button while starting to prevent multiple attempts
+                toggleGattServerButton.isEnabled = false
+                if (!gattServerController.startServer()) {
+                    // Re-enable if start failed immediately
+                    toggleGattServerButton.isEnabled = true
+                    // Error will be reported via callback
+                }
+                // If startServer returns true, button will be re-enabled in onServerStarted/onServerError callbacks
+            }
+        }
+    }
+
+    override fun onServerStarted() {
+        runOnUiThread {
+            toggleGattServerButton.isEnabled = true
+            updateGattServerUi()
+        }
+    }
+
+    override fun onServerStopped() {
+        runOnUiThread {
+            toggleGattServerButton.isEnabled = true
+            updateGattServerUi()
+        }
+    }
+
+    override fun onServerError(errorCode: Int) {
+        runOnUiThread {
+            toggleGattServerButton.isEnabled = true
+            updateGattServerUi()
+            val errorMessage = when (errorCode) {
+                -1 -> "Unknown error occurred"
+                -2 -> "Bluetooth not enabled"
+                -3 -> "BLE advertising not supported on this device"
+                -4 -> "Failed to open GATT server"
+                -5 -> "Failed to add GATT service"
+                -6 -> "Permission denied - check Bluetooth permissions"
+                AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "Advertising already started"
+                AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Advertisement data too large"
+                AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Advertising feature not supported"
+                AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Internal advertising error"
+                AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                else -> "Server error (code $errorCode)"
+            }
+            Snackbar.make(
+                gattServerView,
+                errorMessage,
+                Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    override fun onClientConnected(address: String) {
+        runOnUiThread {
+            updateGattServerUi()
+        }
+    }
+
+    override fun onClientDisconnected(address: String) {
+        runOnUiThread {
+            updateGattServerUi()
+        }
+    }
+
+    override fun onDataReceived(data: ByteArray) {
+        runOnUiThread {
+            val dataString = data.joinToString(" ") { "%02X".format(it) }
+            receivedDataHistory.append("${System.currentTimeMillis()}: $dataString\n")
+            if (receivedDataHistory.length > 1000) {
+                receivedDataHistory.delete(0, receivedDataHistory.length - 1000)
+            }
+            gattServerDataReceivedText.text = receivedDataHistory.toString()
+        }
+    }
+
+    private fun updateGattServerUi() {
+        val running = gattServerController.isRunning
+        gattServerProgressIndicator.isVisible = running
+        toggleGattServerButton.apply {
+            isEnabled = true
+            text = if (running) {
+                getString(R.string.gatt_server_stop_button)
+            } else {
+                getString(R.string.gatt_server_start_button)
+            }
+        }
+        gattServerStatusText.text = if (running) {
+            getString(R.string.gatt_server_status_running)
+        } else {
+            getString(R.string.gatt_server_status_stopped)
+        }
+        
+        val address = gattServerController.getServerAddress() ?: "Unknown"
+        gattServerAddressText.text = "Address: $address"
+        
+        val clientCount = gattServerController.connectedClientCount
+        gattServerConnectedClientsText.text = getString(R.string.gatt_server_connected_clients, clientCount)
     }
 }
 

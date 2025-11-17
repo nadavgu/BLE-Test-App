@@ -20,5 +20,12 @@
     <string name="menu_scan">BLE Scanner</string>
     <string name="menu_gatt_server">GATT Server</string>
     <string name="gatt_server_title">BLE GATT Server</string>
-    <string name="gatt_server_empty_state">GATT Server will be implemented here</string>
+    <string name="gatt_server_status_stopped">Server stopped</string>
+    <string name="gatt_server_status_running">Server running</string>
+    <string name="gatt_server_start_button">Start Server</string>
+    <string name="gatt_server_stop_button">Stop Server</string>
+    <string name="gatt_server_info_title">Server Information</string>
+    <string name="gatt_server_connected_clients">Connected clients: %1$d</string>
+    <string name="gatt_server_data_title">Received Data</string>
+    <string name="gatt_server_error">Server error (code %1$d)</string>
 </resources>
