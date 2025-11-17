@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -46,23 +47,37 @@ class ScanResultViewHolder(private val cardView: MaterialCardView) :
     private val connectableView: TextView = cardView.findViewById(R.id.deviceConnectableText)
 
     fun bind(device: ScannedDevice) {
+        val context = cardView.context
+        
         nameView.text = device.name
         addressView.text = device.address
-        rssiView.text = cardView.context.getString(
-            R.string.scan_item_rssi,
-            device.rssi
-        )
+        
+        // Color code RSSI values
+        val rssiText = context.getString(R.string.scan_item_rssi, device.rssi)
+        rssiView.text = rssiText
+        val rssiColor = when {
+            device.rssi >= -50 -> ContextCompat.getColor(context, R.color.rssi_good)
+            device.rssi >= -70 -> ContextCompat.getColor(context, R.color.rssi_medium)
+            else -> ContextCompat.getColor(context, R.color.rssi_poor)
+        }
+        rssiView.setTextColor(rssiColor)
+        
         lastSeenView.text = DateUtils.getRelativeTimeSpanString(
             device.lastSeen,
             System.currentTimeMillis(),
             DateUtils.SECOND_IN_MILLIS
         )
+        
+        // Update connectable badge
         connectableView.isVisible = true
-        connectableView.text = if (device.isConnectable) {
-            cardView.context.getString(R.string.scan_item_connectable_true)
+        if (device.isConnectable) {
+            connectableView.text = context.getString(R.string.scan_item_connectable_true)
+            connectableView.setBackgroundResource(R.drawable.connectable_badge)
         } else {
-            cardView.context.getString(R.string.scan_item_connectable_false)
+            connectableView.text = context.getString(R.string.scan_item_connectable_false)
+            connectableView.setBackgroundResource(R.drawable.non_connectable_badge)
         }
+        connectableView.setTextColor(ContextCompat.getColor(context, R.color.white))
     }
 }
 

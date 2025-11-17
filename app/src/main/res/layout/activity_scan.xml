@@ -4,15 +4,18 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
     android:fitsSystemWindows="true"
     tools:context=".ScanActivity">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/scanToolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary"
         android:title="@string/scan_title"
+        android:titleTextColor="?attr/colorOnPrimary"
+        android:titleTextAppearance="?attr/textAppearanceHeadline6"
         app:layout_scrollFlags="scroll|enterAlways"
         app:titleCentered="true" />
 
@@ -32,21 +35,25 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="8dp">
+            android:paddingStart="8dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="12dp">
 
             <TextView
                 android:id="@+id/scanStatusText"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
                 android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp"
                 tools:text="@string/scan_status_scanning" />
 
             <com.google.android.material.progressindicator.CircularProgressIndicator
                 android:id="@+id/scanProgressIndicator"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:indeterminate="true"
                 android:visibility="gone" />
         </LinearLayout>
@@ -61,9 +68,11 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="16dp"
+                android:padding="20dp"
                 android:text="@string/scan_empty_state"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
+                android:textAppearance="?attr/textAppearanceBody1"
+                android:textSize="16sp"
+                android:gravity="center" />
 
         </com.google.android.material.card.MaterialCardView>
 
@@ -80,7 +89,11 @@
             android:id="@+id/toggleScanButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/scan_start_button" />
+            android:layout_marginTop="8dp"
+            android:minHeight="56dp"
+            android:text="@string/scan_start_button"
+            android:textSize="16sp"
+            app:cornerRadius="12dp" />
 
     </LinearLayout>
 

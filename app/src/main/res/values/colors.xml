@@ -1,10 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Primary colors -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
+    
+    <!-- Secondary colors -->
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
+    
+    <!-- Surface colors for better contrast -->
+    <color name="surface_light">#FFFFFFFF</color>
+    <color name="surface_dark">#FF121212</color>
+    <color name="surface_variant_light">#FFF5F5F5</color>
+    <color name="surface_variant_dark">#FF1E1E1E</color>
+    
+    <!-- Text colors with proper contrast -->
+    <color name="text_primary_light">#DE000000</color>
+    <color name="text_primary_dark">#FFFFFFFF</color>
+    <color name="text_secondary_light">#66000000</color>
+    <color name="text_secondary_dark">#99FFFFFF</color>
+    <!-- Secondary text that works on both light and dark surfaces -->
+    <color name="text_secondary">#9E9E9E</color>
+    
+    <!-- Basic colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Accent colors for device info -->
+    <color name="rssi_good">#FF4CAF50</color>
+    <color name="rssi_medium">#FFFF9800</color>
+    <color name="rssi_poor">#FFF44336</color>
+    <color name="connectable">#FF2196F3</color>
 </resources>
