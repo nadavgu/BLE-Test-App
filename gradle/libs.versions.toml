@@ -1,6 +1,6 @@
 [versions]
 agp = "8.13.1"
-kotlin = "2.0.21"
+kotlin = "2.2.21"
 coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -15,7 +15,7 @@ androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "j
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
-nordic-ble = { group = "no.nordicsemi.android", name = "ble-ktx", version = "2.7.5" }
+nordic-ble = { group = "no.nordicsemi.android", name = "ble-ktx", version = "2.11.0" }
 nordic-scanner = { group = "no.nordicsemi.android.support.v18", name = "scanner", version = "1.6.0" }
 
 [plugins]

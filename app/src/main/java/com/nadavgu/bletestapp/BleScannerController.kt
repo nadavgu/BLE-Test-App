@@ -1,6 +1,5 @@
 package com.nadavgu.bletestapp
 
-import android.annotation.SuppressLint
 import no.nordicsemi.android.support.v18.scanner.BluetoothLeScannerCompat
 import no.nordicsemi.android.support.v18.scanner.ScanCallback
 import no.nordicsemi.android.support.v18.scanner.ScanFilter
@@ -46,8 +45,6 @@ class BleScannerController(
     val isScanning: Boolean
         get() = scanning
 
-    // Permission check is performed before calling scanner.startScan()
-    @SuppressLint("MissingPermission")
     fun startScan(): Boolean {
         if (scanning) return false
         if (!bleRequirements.hasAllPermissions()) {
@@ -57,19 +54,18 @@ class BleScannerController(
             scanner.startScan(scanFilters, scanSettings, scanCallback)
             scanning = true
             true
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             false
         }
     }
 
-    @SuppressLint("MissingPermission")
     fun stopScan(): Boolean {
         if (!scanning) return false
         return try {
             scanner.stopScan(scanCallback)
             scanning = false
             true
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             scanning = false
             false
         }

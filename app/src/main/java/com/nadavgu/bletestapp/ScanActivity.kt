@@ -1,6 +1,5 @@
 package com.nadavgu.bletestapp
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Bundle
@@ -205,10 +204,10 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
     }
 
     private fun addOrUpdateResult(result: ScanResult) {
-        val device = result.device ?: return
+        val device = result.device
         val name = try {
             device.name ?: result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
         }
         val scannedDevice = ScannedDevice(
