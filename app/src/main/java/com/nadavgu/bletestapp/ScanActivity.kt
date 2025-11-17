@@ -91,10 +91,6 @@ class ScanActivity : AppCompatActivity(), BleScannerController.Listener {
 
     override fun onStart() {
         super.onStart()
-        // Automatically prompt for permissions so the user can scan right away.
-        if (!scannerController.isScanning) {
-            onStartScanClicked()
-        }
     }
 
     override fun onStop() {
