@@ -83,6 +83,8 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:paddingBottom="16dp"
+            android:scrollbars="vertical"
+            android:fadeScrollbars="false"
             tools:listitem="@layout/item_scan_result" />
 
         <com.google.android.material.button.MaterialButton
