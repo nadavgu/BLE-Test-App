@@ -1,11 +1,17 @@
 package com.nadavgu.bletestapp
 
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
+import android.os.ParcelUuid
 import no.nordicsemi.android.ble.BleServerManager
 import no.nordicsemi.android.ble.observer.ServerObserver
 import java.util.UUID
@@ -35,6 +41,17 @@ class BleGattServerController(
     private var serverManager: MyBleServerManager? = null
     private var isServerRunning = false
     private val connectedClients = mutableSetOf<String>()
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private var isAdvertising = false
+
+    private val advertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+        }
+
+        override fun onStartFailure(errorCode: Int) {
+            listener.onServerError(errorCode)
+        }
+    }
 
     private inner class MyBleServerManager(context: Context) : BleServerManager(context) {
         init {
@@ -108,15 +125,22 @@ class BleGattServerController(
 
     fun getServiceUuid(): UUID = serviceUuid
 
+    @SuppressLint("MissingPermission")
     fun startServer(): Boolean {
         if (isServerRunning) {
             return false
         }
         
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        val bluetoothAdapter = bluetoothManager?.adapter
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+        bluetoothAdapter = bluetoothManager?.adapter
+        if (bluetoothAdapter == null || !bluetoothAdapter!!.isEnabled) {
             listener.onServerError(-2) // Bluetooth not enabled
+            return false
+        }
+
+        // Check if BLE advertising is supported
+        if (bluetoothAdapter?.bluetoothLeAdvertiser == null) {
+            listener.onServerError(-3) // Advertising not supported
             return false
         }
 
@@ -126,6 +150,10 @@ class BleGattServerController(
 
             // Start the server - initializeServer() will be called automatically
             serverManager!!.open()
+            
+            // Start advertising so the server can be discovered
+            startAdvertising()
+            
             true
         } catch (e: SecurityException) {
             listener.onServerError(-6) // Permission denied
@@ -136,10 +164,36 @@ class BleGattServerController(
         }
     }
 
+    @SuppressLint("MissingPermission")
+    private fun startAdvertising() {
+        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
+
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(true)
+            .build()
+
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .addServiceUuid(ParcelUuid(serviceUuid))
+            .build()
+
+        advertiser.startAdvertising(settings, data, advertiseCallback)
+        isAdvertising = true
+    }
+
+    @SuppressLint("MissingPermission")
     fun stopServer(): Boolean {
         if (!isServerRunning) return false
         
         return try {
+            // Stop advertising
+            if (isAdvertising) {
+                bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
+                isAdvertising = false
+            }
+            
             serverManager?.close()
             serverManager = null
             isServerRunning = false
