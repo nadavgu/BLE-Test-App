@@ -373,6 +373,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             }
         }
 
+        // Extract service UUIDs from scan record
+        val serviceUuidsList = result.scanRecord?.serviceUuids?.map { it.uuid } ?: emptyList<UUID>()
+
         val scannedDevice = ScannedDevice(
             address = address,
             name = name,
@@ -380,7 +383,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             smoothedRssi = smoothedRssi, // Smoothed RSSI for sorting
             isConnectable = result.isConnectable,
             lastSeen = System.currentTimeMillis(),
-            manufacturerData = manufacturerDataMap
+            manufacturerData = manufacturerDataMap,
+            serviceUuids = serviceUuidsList
         )
         scanResults[address] = scannedDevice
 

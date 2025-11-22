@@ -74,6 +74,7 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
         oldItem.rssi == newItem.rssi &&
         oldItem.isConnectable == newItem.isConnectable &&
         oldItem.manufacturerData == newItem.manufacturerData &&
+        oldItem.serviceUuids == newItem.serviceUuids &&
         // Only check lastSeen if it's significantly different (to avoid constant updates)
         kotlin.math.abs(oldItem.lastSeen - newItem.lastSeen) < 1000
 
@@ -84,6 +85,7 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
             oldItem.name == newItem.name &&
             oldItem.isConnectable == newItem.isConnectable &&
             oldItem.manufacturerData == newItem.manufacturerData &&
+            oldItem.serviceUuids == newItem.serviceUuids &&
             kotlin.math.abs(oldItem.lastSeen - newItem.lastSeen) < 1000
         ) {
             ScanResultAdapter.PAYLOAD_RSSI_CHANGED
@@ -106,6 +108,7 @@ class ScanResultViewHolder(
     private val connectableView: TextView = cardView.findViewById(R.id.deviceConnectableText)
     private val expandedInfoView: android.view.View = cardView.findViewById(R.id.expandedInfoView)
     private val manufacturerDataView: TextView = cardView.findViewById(R.id.manufacturerDataText)
+    private val serviceUuidsView: TextView = cardView.findViewById(R.id.serviceUuidsText)
     
     // Track previous values to avoid unnecessary updates
     private var previousRssi: Int? = null
@@ -170,6 +173,16 @@ class ScanResultViewHolder(
                 manufacturerDataView.isVisible = true
             } else {
                 manufacturerDataView.isVisible = false
+            }
+            
+            // Show service UUIDs if available
+            if (device.serviceUuids.isNotEmpty()) {
+                val serviceUuidsText = device.serviceUuids.joinToString("\n") { it.toString().uppercase() }
+                serviceUuidsView.text = serviceUuidsText
+                serviceUuidsView.isVisible = true
+            } else {
+                serviceUuidsView.text = context.getString(R.string.scan_item_no_service_uuids)
+                serviceUuidsView.isVisible = true
             }
         }
     }

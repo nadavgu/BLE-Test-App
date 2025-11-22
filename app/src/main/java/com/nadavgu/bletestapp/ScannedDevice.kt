@@ -1,5 +1,7 @@
 package com.nadavgu.bletestapp
 
+import java.util.UUID
+
 data class ScannedDevice(
     val address: String,
     val name: String,
@@ -7,7 +9,8 @@ data class ScannedDevice(
     val smoothedRssi: Double, // Smoothed RSSI for sorting
     val isConnectable: Boolean,
     val lastSeen: Long,
-    val manufacturerData: Map<Int, ByteArray> = emptyMap() // Map of manufacturer ID to data
+    val manufacturerData: Map<Int, ByteArray> = emptyMap(), // Map of manufacturer ID to data
+    val serviceUuids: List<UUID>
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -26,6 +29,7 @@ data class ScannedDevice(
             val otherValue = other.manufacturerData[key]
             if (otherValue == null || !value.contentEquals(otherValue)) return false
         }
+        if (serviceUuids != other.serviceUuids) return false
 
         return true
     }
@@ -38,6 +42,7 @@ data class ScannedDevice(
         result = 31 * result + isConnectable.hashCode()
         result = 31 * result + lastSeen.hashCode()
         result = 31 * result + manufacturerData.hashCode()
+        result = 31 * result + serviceUuids.hashCode()
         return result
     }
 }

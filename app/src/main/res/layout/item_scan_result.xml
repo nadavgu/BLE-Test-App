@@ -116,7 +116,28 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
+                android:layout_marginBottom="16dp"
                 tools:text="0x004C: 01 02 03 04 05" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/scan_item_service_uuids_title"
+                android:textAppearance="?attr/textAppearanceSubtitle2"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/serviceUuidsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBody2"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                tools:text="0000180F-0000-1000-8000-00805F9B34FB" />
 
         </LinearLayout>
 
