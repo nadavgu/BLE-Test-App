@@ -3,11 +3,13 @@ package com.nadavgu.bletestapp
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import no.nordicsemi.android.ble.observer.ConnectionObserver
 
 class ConnectedDeviceAdapter(
     private val onDisconnectClick: (String) -> Unit
@@ -32,6 +34,7 @@ class ConnectedDeviceAdapter(
         private val nameView: TextView = cardView.findViewById(R.id.deviceNameText)
         private val addressView: TextView = cardView.findViewById(R.id.deviceAddressText)
         private val statusView: TextView = cardView.findViewById(R.id.deviceStatusText)
+        private val disconnectionReasonView: TextView = cardView.findViewById(R.id.disconnectionReasonText)
         private val disconnectButton: MaterialButton = cardView.findViewById(R.id.disconnectButton)
 
         fun bind(device: ConnectedDevice) {
@@ -40,14 +43,50 @@ class ConnectedDeviceAdapter(
             nameView.text = device.name
             addressView.text = device.address
 
-            statusView.text = if (device.isConnecting) {
-                context.getString(R.string.connected_device_status_connecting)
+            if (device.isDisconnected) {
+                statusView.text = context.getString(R.string.connected_device_status_disconnected)
+                statusView.setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+                
+                // Show disconnection reason
+                val reasonText = getDisconnectionReasonText(context, device.disconnectionReason)
+                disconnectionReasonView.text = reasonText
+                disconnectionReasonView.visibility = android.view.View.VISIBLE
+                
+                // Change button text to "Remove"
+                disconnectButton.text = context.getString(R.string.connected_device_remove)
+            } else if (device.isConnecting) {
+                statusView.text = context.getString(R.string.connected_device_status_connecting)
+                statusView.setTextColor(ContextCompat.getColor(context, android.R.color.holo_blue_dark))
+                disconnectionReasonView.visibility = android.view.View.GONE
+                disconnectButton.text = context.getString(R.string.connected_device_disconnect)
             } else {
-                context.getString(R.string.connected_device_status_connected)
+                statusView.text = context.getString(R.string.connected_device_status_connected)
+                statusView.setTextColor(ContextCompat.getColor(context, android.R.color.holo_green_dark))
+                disconnectionReasonView.visibility = android.view.View.GONE
+                disconnectButton.text = context.getString(R.string.connected_device_disconnect)
             }
 
             disconnectButton.setOnClickListener {
                 onDisconnectClick(device.address)
+            }
+        }
+        
+        private fun getDisconnectionReasonText(context: android.content.Context, reason: Int?): String {
+            if (reason == null) {
+                return context.getString(R.string.connected_device_disconnected_unknown)
+            }
+            
+            // Use ConnectionObserver constants from Nordic BLE library
+            return when (reason) {
+                ConnectionObserver.REASON_SUCCESS -> context.getString(R.string.connected_device_disconnected_success)
+                ConnectionObserver.REASON_TIMEOUT -> context.getString(R.string.connected_device_disconnected_timeout)
+                ConnectionObserver.REASON_TERMINATE_LOCAL_HOST -> context.getString(R.string.connected_device_disconnected_local_host)
+                ConnectionObserver.REASON_TERMINATE_PEER_USER -> context.getString(R.string.connected_device_disconnected_remote_user)
+                ConnectionObserver.REASON_NOT_SUPPORTED -> context.getString(R.string.connected_device_disconnected_not_supported)
+                ConnectionObserver.REASON_LINK_LOSS -> context.getString(R.string.connected_device_disconnected_link_loss)
+                ConnectionObserver.REASON_CANCELLED -> context.getString(R.string.connected_device_disconnected_cancelled)
+                ConnectionObserver.REASON_UNKNOWN -> context.getString(R.string.connected_device_disconnected_unknown)
+                else -> context.getString(R.string.connected_device_disconnected_reason, reason)
             }
         }
     }
@@ -60,7 +99,9 @@ private object ConnectedDeviceDiffCallback : DiffUtil.ItemCallback<ConnectedDevi
     override fun areContentsTheSame(oldItem: ConnectedDevice, newItem: ConnectedDevice): Boolean =
         oldItem.address == newItem.address &&
         oldItem.name == newItem.name &&
-        oldItem.isConnecting == newItem.isConnecting
+        oldItem.isConnecting == newItem.isConnecting &&
+        oldItem.isDisconnected == newItem.isDisconnected &&
+        oldItem.disconnectionReason == newItem.disconnectionReason
 }
 
 

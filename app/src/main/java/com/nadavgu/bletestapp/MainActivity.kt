@@ -132,7 +132,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             onConnectToDevice(address)
         }
         connectedDevicesAdapter = ConnectedDeviceAdapter { address ->
-            connectionController.disconnectDevice(address)
+            val device = connectionController.getConnectedDevices().find { it.address == address }
+            if (device?.isDisconnected == true) {
+                // Remove disconnected device from list
+                connectionController.removeDisconnectedDevice(address)
+                updateConnectedDevicesUi()
+            } else {
+                // Disconnect active device
+                connectionController.disconnectDevice(address)
+            }
         }
         bindViews()
         configureToolbar()
@@ -837,8 +845,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }
     }
 
-    override fun onDeviceDisconnected(address: String) {
-        Log.i(TAG, "onDeviceDisconnected: Device disconnected - $address")
+    override fun onDeviceDisconnected(address: String, reason: Int) {
+        Log.i(TAG, "onDeviceDisconnected: Device disconnected - $address, reason=$reason")
         runOnUiThread {
             updateConnectedDevicesUi()
         }
@@ -862,10 +870,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         connectedDevicesStatusText.text = "$deviceCount ${if (deviceCount == 1) "device connected" else "devices connected"}"
         
         connectedDevicesEmptyStateCard.isVisible = devices.isEmpty()
-        // Convert DeviceInfo to ConnectedDevice for the adapter
-        connectedDevicesAdapter.submitList(devices.map { 
-            ConnectedDevice(it.address, it.name, it.isConnecting) 
-        })
+        // Devices are already ConnectedDevice objects, no conversion needed
+        connectedDevicesAdapter.submitList(devices)
     }
 }
 

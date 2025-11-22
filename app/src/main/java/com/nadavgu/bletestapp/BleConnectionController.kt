@@ -2,6 +2,7 @@ package com.nadavgu.bletestapp
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.util.Log
 import no.nordicsemi.android.ble.BleManager
@@ -21,7 +22,7 @@ class BleConnectionController(
 
     interface Listener {
         fun onDeviceConnected(address: String, name: String)
-        fun onDeviceDisconnected(address: String)
+        fun onDeviceDisconnected(address: String, reason: Int)
         fun onConnectionFailed(address: String, errorCode: Int)
     }
 
@@ -30,6 +31,10 @@ class BleConnectionController(
 
         override fun log(priority: Int, message: String) {
             Log.println(priority, TAG, message)
+        }
+
+        override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
+            return super.isRequiredServiceSupported(gatt)
         }
         
         // Override to ensure connection stays alive
@@ -61,7 +66,13 @@ class BleConnectionController(
             Log.i(TAG, "connectToDevice: Initiating connection to $address ($deviceName)")
             
             // Store device info as connecting
-            connectedDevices[address] = ConnectedDevice(address, deviceName, isConnecting = true)
+            connectedDevices[address] = ConnectedDevice(
+                address = address,
+                name = deviceName,
+                isConnecting = true,
+                isDisconnected = false,
+                disconnectionReason = null
+            )
             
             val manager = MyBleManager(context)
             manager.setConnectionObserver(object : ConnectionObserver {
@@ -80,8 +91,16 @@ class BleConnectionController(
                 override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
                     Log.i(TAG, "onDeviceDisconnected: ${device.address}, reason=$reason")
                     connections.remove(device.address)
-                    connectedDevices.remove(device.address)
-                    listener.onDeviceDisconnected(device.address)
+                    // Mark device as disconnected instead of removing it
+                    val existingDevice = connectedDevices[device.address]
+                    if (existingDevice != null) {
+                        connectedDevices[device.address] = existingDevice.copy(
+                            isDisconnected = true,
+                            disconnectionReason = reason,
+                            isConnecting = false
+                        )
+                    }
+                    listener.onDeviceDisconnected(device.address, reason)
                 }
 
                 override fun onDeviceReady(device: BluetoothDevice) {
@@ -91,7 +110,13 @@ class BleConnectionController(
                         connectedDevices[device.address]?.name ?: "Unknown"
                     }
                     Log.i(TAG, "onDeviceReady: ${device.address} ($name) - connection fully established")
-                    connectedDevices[device.address] = ConnectedDevice(device.address, name, isConnecting = false)
+                    connectedDevices[device.address] = ConnectedDevice(
+                        address = device.address,
+                        name = name,
+                        isConnecting = false,
+                        isDisconnected = false,
+                        disconnectionReason = null
+                    )
                     listener.onDeviceConnected(device.address, name)
                 }
 
@@ -123,12 +148,23 @@ class BleConnectionController(
     fun disconnectDevice(address: String): Boolean {
         val manager = connections[address] ?: run {
             Log.w(TAG, "disconnectDevice: No connection found for $address")
+            // If device is already disconnected, remove it from the list
+            if (connectedDevices[address]?.isDisconnected == true) {
+                connectedDevices.remove(address)
+            }
             return false
         }
         Log.i(TAG, "disconnectDevice: Disconnecting $address")
         // Don't remove from map immediately - let the callback handle it
         manager.disconnect().enqueue()
         return true
+    }
+    
+    fun removeDisconnectedDevice(address: String) {
+        if (connectedDevices[address]?.isDisconnected == true) {
+            Log.d(TAG, "removeDisconnectedDevice: Removing disconnected device $address")
+            connectedDevices.remove(address)
+        }
     }
 
     fun getConnectedDevices(): List<ConnectedDevice> {
