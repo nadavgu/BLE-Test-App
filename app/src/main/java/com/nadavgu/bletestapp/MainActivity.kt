@@ -60,6 +60,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var gattServerDataReceivedText: TextView
     private lateinit var gattServerUuidInput: com.google.android.material.textfield.TextInputEditText
     private lateinit var gattServerUuidLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var gattServerManufacturerIdInput: com.google.android.material.textfield.TextInputEditText
+    private lateinit var gattServerManufacturerIdLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var gattServerManufacturerDataInput: com.google.android.material.textfield.TextInputEditText
     private lateinit var gattServerManufacturerDataLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var toggleGattServerButton: MaterialButton
@@ -169,12 +171,28 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         gattServerDataReceivedText = gattServerView.findViewById(R.id.gattServerDataReceivedText)
             gattServerUuidInput = gattServerView.findViewById(R.id.gattServerUuidInput)
             gattServerUuidLayout = gattServerView.findViewById(R.id.gattServerUuidLayout)
+            gattServerManufacturerIdInput = gattServerView.findViewById(R.id.gattServerManufacturerIdInput)
+            gattServerManufacturerIdLayout = gattServerView.findViewById(R.id.gattServerManufacturerIdLayout)
             gattServerManufacturerDataInput = gattServerView.findViewById(R.id.gattServerManufacturerDataInput)
             gattServerManufacturerDataLayout = gattServerView.findViewById(R.id.gattServerManufacturerDataLayout)
             toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
             
             // Initialize UUID input with current UUID
             gattServerUuidInput.setText(gattServerController.getServiceUuid().toString())
+            
+            // Initialize Manufacturer ID and Data inputs with current values
+            gattServerController.getManufacturerId()?.let { id ->
+                gattServerManufacturerIdInput.setText("0x%04X".format(id))
+                gattServerController.getManufacturerData()?.let { data ->
+                    val dataHex = data.joinToString(" ") { "%02X".format(it) }
+                    gattServerManufacturerDataInput.setText(dataHex)
+                } ?: run {
+                    gattServerManufacturerDataInput.setText("")
+                }
+            } ?: run {
+                gattServerManufacturerIdInput.setText("")
+                gattServerManufacturerDataInput.setText("")
+            }
 
         toggleGattServerButton.setOnClickListener {
             if (gattServerController.isRunning) {
@@ -476,25 +494,44 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 }
                 
                 // Parse and set manufacturer data if provided
+                val manufacturerIdString = gattServerManufacturerIdInput.text?.toString()?.trim() ?: ""
                 val manufacturerDataString = gattServerManufacturerDataInput.text?.toString()?.trim() ?: ""
-                if (manufacturerDataString.isNotEmpty()) {
+                
+                if (manufacturerIdString.isNotEmpty() || manufacturerDataString.isNotEmpty()) {
+                    // Both fields must be provided if one is provided
+                    if (manufacturerIdString.isEmpty()) {
+                        gattServerManufacturerIdLayout.error = getString(R.string.gatt_server_manufacturer_id_invalid)
+                        return
+                    }
+                    if (manufacturerDataString.isEmpty()) {
+                        gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        return
+                    }
+                    
                     try {
-                        val (manufacturerId, data) = parseManufacturerData(manufacturerDataString)
+                        val manufacturerId = parseManufacturerId(manufacturerIdString)
+                        val data = parseManufacturerDataBytes(manufacturerDataString)
                         if (!gattServerController.setManufacturerData(manufacturerId, data)) {
                             // Error already reported via callback
                             return
                         }
+                        gattServerManufacturerIdLayout.error = null
                         gattServerManufacturerDataLayout.error = null
                     } catch (e: IllegalArgumentException) {
-                        gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        if (e.message?.contains("ID") == true) {
+                            gattServerManufacturerIdLayout.error = getString(R.string.gatt_server_manufacturer_id_invalid)
+                        } else {
+                            gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        }
                         return
                     }
                 } else {
-                    // Clear manufacturer data if empty
+                    // Clear manufacturer data if both fields are empty
                     if (!gattServerController.setManufacturerData(null, null)) {
                         // Error already reported via callback
                         return
                     }
+                    gattServerManufacturerIdLayout.error = null
                     gattServerManufacturerDataLayout.error = null
                 }
                 
@@ -599,44 +636,74 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         
         // Enable/disable UUID and manufacturer data inputs based on server state
         gattServerUuidInput.isEnabled = !running
+        gattServerManufacturerIdInput.isEnabled = !running
         gattServerManufacturerDataInput.isEnabled = !running
         
         // Clear errors when server state changes
-        if (running) {
+        if (!running) {
             gattServerUuidLayout.error = null
+            gattServerManufacturerIdLayout.error = null
             gattServerManufacturerDataLayout.error = null
         }
     }
 
-    private fun parseManufacturerData(input: String): Pair<Int, ByteArray> {
-        // Expected format: "0x004C 01 02 03" or "0x004C 010203" or "004C 01 02 03"
+    private fun parseManufacturerId(input: String): Int {
+        // Expected format: "0x004C" or "004C" (hex, 16-bit)
         val trimmed = input.trim()
         
-        // Find manufacturer ID (hex number, with or without 0x prefix)
-        val idPattern = Regex("""(?:0x)?([0-9A-Fa-f]{4})""")
-        val idMatch = idPattern.find(trimmed) ?: throw IllegalArgumentException("Invalid manufacturer ID format")
-        val manufacturerId = idMatch.groupValues[1].toInt(16)
-        
-        // Extract data bytes (everything after the manufacturer ID)
-        val dataStart = idMatch.range.last + 1
-        val dataString = trimmed.substring(dataStart).trim()
-        
-        if (dataString.isEmpty()) {
-            // No data bytes, just manufacturer ID
-            return Pair(manufacturerId, ByteArray(0))
+        // Remove 0x prefix if present
+        val hexString = if (trimmed.startsWith("0x", ignoreCase = true)) {
+            trimmed.substring(2)
+        } else {
+            trimmed
         }
         
-        // Parse hex bytes (with or without spaces)
-        val hexBytes = dataString.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (hexString.isEmpty()) {
+            throw IllegalArgumentException("Invalid manufacturer ID: empty")
+        }
+        
+        val manufacturerId = try {
+            hexString.toInt(16)
+        } catch (e: NumberFormatException) {
+            throw IllegalArgumentException("Invalid manufacturer ID format: $trimmed", e)
+        }
+        
+        if (manufacturerId < 0 || manufacturerId > 0xFFFF) {
+            throw IllegalArgumentException("Invalid manufacturer ID: must be 0x0000-0xFFFF")
+        }
+        
+        return manufacturerId
+    }
+    
+    private fun parseManufacturerDataBytes(input: String): ByteArray {
+        // Expected format: "01 02 03" or "010203" (hex bytes)
+        val trimmed = input.trim()
+        
+        if (trimmed.isEmpty()) {
+            return ByteArray(0)
+        }
+        
+        // Split by spaces or parse as pairs of hex digits
+        val hexBytes = if (trimmed.contains(" ")) {
+            trimmed.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        } else {
+            // Parse as consecutive pairs of hex digits
+            trimmed.chunked(2)
+        }
+        
         val data = hexBytes.map { hexByte ->
             if (hexByte.length == 2) {
-                hexByte.toInt(16).toByte()
+                try {
+                    hexByte.toInt(16).toByte()
+                } catch (e: NumberFormatException) {
+                    throw IllegalArgumentException("Invalid hex byte: $hexByte", e)
+                }
             } else {
-                throw IllegalArgumentException("Invalid hex byte: $hexByte")
+                throw IllegalArgumentException("Invalid hex byte length: $hexByte (must be 2 hex digits)")
             }
         }.toByteArray()
         
-        return Pair(manufacturerId, data)
+        return data
     }
 }
 

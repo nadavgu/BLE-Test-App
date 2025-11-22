@@ -129,6 +129,10 @@ class BleGattServerController(
 
     fun getServiceUuid(): UUID = serviceUuid
 
+    fun getManufacturerId(): Int? = manufacturerId
+    
+    fun getManufacturerData(): ByteArray? = manufacturerData
+
     fun setManufacturerData(manufacturerId: Int?, data: ByteArray?): Boolean {
         if (isServerRunning) {
             // Cannot change manufacturer data while server is running

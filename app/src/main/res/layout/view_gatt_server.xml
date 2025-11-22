@@ -151,6 +151,26 @@
                 android:layout_marginBottom="8dp" />
 
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/gattServerManufacturerIdLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/gatt_server_manufacturer_id_hint"
+                app:errorEnabled="true"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/gattServerManufacturerIdInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:fontFamily="monospace"
+                    android:textSize="14sp"
+                    android:enabled="true"
+                    tools:text="0x004C" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/gattServerManufacturerDataLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -165,7 +185,7 @@
                     android:fontFamily="monospace"
                     android:textSize="14sp"
                     android:enabled="true"
-                    tools:text="0x004C 01 02 03" />
+                    tools:text="01 02 03" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
