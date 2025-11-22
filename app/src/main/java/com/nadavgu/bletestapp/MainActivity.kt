@@ -57,6 +57,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var gattServerDataReceivedText: TextView
     private lateinit var gattServerUuidInput: com.google.android.material.textfield.TextInputEditText
     private lateinit var gattServerUuidLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var gattServerManufacturerDataInput: com.google.android.material.textfield.TextInputEditText
+    private lateinit var gattServerManufacturerDataLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var toggleGattServerButton: MaterialButton
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
@@ -162,12 +164,14 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         gattServerAddressText = gattServerView.findViewById(R.id.gattServerAddressText)
         gattServerConnectedClientsText = gattServerView.findViewById(R.id.gattServerConnectedClientsText)
         gattServerDataReceivedText = gattServerView.findViewById(R.id.gattServerDataReceivedText)
-        gattServerUuidInput = gattServerView.findViewById(R.id.gattServerUuidInput)
-        gattServerUuidLayout = gattServerView.findViewById(R.id.gattServerUuidLayout)
-        toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
-
-        // Initialize UUID input with current UUID
-        gattServerUuidInput.setText(gattServerController.getServiceUuid().toString())
+            gattServerUuidInput = gattServerView.findViewById(R.id.gattServerUuidInput)
+            gattServerUuidLayout = gattServerView.findViewById(R.id.gattServerUuidLayout)
+            gattServerManufacturerDataInput = gattServerView.findViewById(R.id.gattServerManufacturerDataInput)
+            gattServerManufacturerDataLayout = gattServerView.findViewById(R.id.gattServerManufacturerDataLayout)
+            toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
+            
+            // Initialize UUID input with current UUID
+            gattServerUuidInput.setText(gattServerController.getServiceUuid().toString())
 
         toggleGattServerButton.setOnClickListener {
             if (gattServerController.isRunning) {
@@ -454,7 +458,30 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                     gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
                     return
                 }
-
+                
+                // Parse and set manufacturer data if provided
+                val manufacturerDataString = gattServerManufacturerDataInput.text?.toString()?.trim() ?: ""
+                if (manufacturerDataString.isNotEmpty()) {
+                    try {
+                        val (manufacturerId, data) = parseManufacturerData(manufacturerDataString)
+                        if (!gattServerController.setManufacturerData(manufacturerId, data)) {
+                            // Error already reported via callback
+                            return
+                        }
+                        gattServerManufacturerDataLayout.error = null
+                    } catch (e: IllegalArgumentException) {
+                        gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        return
+                    }
+                } else {
+                    // Clear manufacturer data if empty
+                    if (!gattServerController.setManufacturerData(null, null)) {
+                        // Error already reported via callback
+                        return
+                    }
+                    gattServerManufacturerDataLayout.error = null
+                }
+                
                 // Disable button while starting to prevent multiple attempts
                 toggleGattServerButton.isEnabled = false
                 if (!gattServerController.startServer()) {
@@ -492,6 +519,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 -4 -> "Failed to open GATT server"
                 -5 -> "Failed to add GATT service"
                 -6 -> "Permission denied - check Bluetooth permissions"
+                -7 -> "Cannot change settings while server is running"
                 AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "Advertising already started"
                 AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Advertisement data too large"
                 AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Advertising feature not supported"
@@ -552,9 +580,47 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
         val clientCount = gattServerController.connectedClientCount
         gattServerConnectedClientsText.text = getString(R.string.gatt_server_connected_clients, clientCount)
-
-        // Enable/disable UUID input based on server state
+        
+        // Enable/disable UUID and manufacturer data inputs based on server state
         gattServerUuidInput.isEnabled = !running
+        gattServerManufacturerDataInput.isEnabled = !running
+        
+        // Clear errors when server state changes
+        if (running) {
+            gattServerUuidLayout.error = null
+            gattServerManufacturerDataLayout.error = null
+        }
+    }
+
+    private fun parseManufacturerData(input: String): Pair<Int, ByteArray> {
+        // Expected format: "0x004C 01 02 03" or "0x004C 010203" or "004C 01 02 03"
+        val trimmed = input.trim()
+        
+        // Find manufacturer ID (hex number, with or without 0x prefix)
+        val idPattern = Regex("""(?:0x)?([0-9A-Fa-f]{4})""")
+        val idMatch = idPattern.find(trimmed) ?: throw IllegalArgumentException("Invalid manufacturer ID format")
+        val manufacturerId = idMatch.groupValues[1].toInt(16)
+        
+        // Extract data bytes (everything after the manufacturer ID)
+        val dataStart = idMatch.range.last + 1
+        val dataString = trimmed.substring(dataStart).trim()
+        
+        if (dataString.isEmpty()) {
+            // No data bytes, just manufacturer ID
+            return Pair(manufacturerId, ByteArray(0))
+        }
+        
+        // Parse hex bytes (with or without spaces)
+        val hexBytes = dataString.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val data = hexBytes.map { hexByte ->
+            if (hexByte.length == 2) {
+                hexByte.toInt(16).toByte()
+            } else {
+                throw IllegalArgumentException("Invalid hex byte: $hexByte")
+            }
+        }.toByteArray()
+        
+        return Pair(manufacturerId, data)
     }
 }
 

@@ -34,6 +34,10 @@ class BleGattServerController(
     // Service UUID - can be set by user
     private var serviceUuid: UUID = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB")
     
+    // Manufacturer data - can be set by user
+    private var manufacturerId: Int? = null
+    private var manufacturerData: ByteArray? = null
+    
     // Characteristic UUIDs
     private val READ_WRITE_CHARACTERISTIC_UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
     private val NOTIFY_CHARACTERISTIC_UUID = UUID.fromString("00002A1A-0000-1000-8000-00805F9B34FB")
@@ -125,6 +129,17 @@ class BleGattServerController(
 
     fun getServiceUuid(): UUID = serviceUuid
 
+    fun setManufacturerData(manufacturerId: Int?, data: ByteArray?): Boolean {
+        if (isServerRunning) {
+            // Cannot change manufacturer data while server is running
+            listener.onServerError(-7) // Custom error code for "cannot change while running"
+            return false
+        }
+        this.manufacturerId = manufacturerId
+        this.manufacturerData = data
+        return true
+    }
+
     @SuppressLint("MissingPermission")
     fun startServer(): Boolean {
         if (isServerRunning) {
@@ -174,12 +189,16 @@ class BleGattServerController(
             .setConnectable(true)
             .build()
 
-        val data = AdvertiseData.Builder()
+        val dataBuilder = AdvertiseData.Builder()
             .setIncludeDeviceName(true)
             .addServiceUuid(ParcelUuid(serviceUuid))
-            .build()
+        
+        // Add manufacturer data if provided
+        if (manufacturerId != null && manufacturerData != null) {
+            dataBuilder.addManufacturerData(manufacturerId!!, manufacturerData!!)
+        }
 
-        advertiser.startAdvertising(settings, data, advertiseCallback)
+        advertiser.startAdvertising(settings, dataBuilder.build(), advertiseCallback)
         isAdvertising = true
     }
 

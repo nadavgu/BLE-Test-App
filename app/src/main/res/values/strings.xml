@@ -31,4 +31,7 @@
     <string name="gatt_server_uuid_title">Service UUID</string>
     <string name="gatt_server_uuid_hint">Enter service UUID (e.g., 0000180F-0000-1000-8000-00805F9B34FB)</string>
     <string name="gatt_server_uuid_invalid">Invalid UUID format</string>
+    <string name="gatt_server_manufacturer_data_title">Manufacturer Data (Optional)</string>
+    <string name="gatt_server_manufacturer_data_hint">Enter manufacturer ID (hex) and data (e.g., 0x004C 01 02 03)</string>
+    <string name="gatt_server_manufacturer_data_invalid">Invalid format. Use: 0xXXXX [data bytes in hex]</string>
 </resources>
