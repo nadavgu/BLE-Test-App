@@ -27,18 +27,17 @@ class BleConnectionController(
     }
 
     private inner class MyBleManager(context: Context) : BleManager(context) {
-        override fun getMinLogPriority(): Int = android.util.Log.DEBUG
+        override fun getMinLogPriority(): Int = Log.DEBUG
 
         override fun log(priority: Int, message: String) {
             Log.println(priority, TAG, message)
         }
 
         override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
-            return super.isRequiredServiceSupported(gatt)
+            // Don't require any specific services - just maintain the connection
+            // This prevents disconnection with REASON_NOT_SUPPORTED when no services are required
+            return true
         }
-        
-        // Override to ensure connection stays alive
-        // Without services to discover, we still want to maintain the connection
     }
 
     @SuppressLint("MissingPermission")
