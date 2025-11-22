@@ -30,10 +30,12 @@ import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
 import androidx.core.util.isNotEmpty
 import androidx.core.util.size
+import android.util.Log
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val SORT_DEBOUNCE_MS = 1_500L // Re-sort every 1.5 seconds
         private const val RSSI_SMOOTHING_ALPHA = 0.3 // Exponential smoothing factor (0.0-1.0)
     }
@@ -101,6 +103,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
             val allGranted = grantResults.values.all { it }
+            Log.d(TAG, "permissionLauncher: Permissions granted=$allGranted")
             if (allGranted) {
                 ensureBluetoothEnabledAndScan()
             } else {
@@ -119,6 +122,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate: Initializing MainActivity")
         setContentView(R.layout.activity_main)
         bleRequirements = BleRequirements(this)
         scannerController = BleScannerController(this, bleRequirements)
@@ -137,14 +141,17 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         updateUiForScanState()
         updateGattServerUi()
         updateConnectedDevicesUi()
+        Log.d(TAG, "onCreate: MainActivity initialized")
     }
 
     override fun onStart() {
         super.onStart()
+        Log.d(TAG, "onStart: Activity started")
     }
 
     override fun onStop() {
         super.onStop()
+        Log.d(TAG, "onStop: Stopping BLE operations")
         stopBleScan()
         gattServerController.stopServer()
         connectionController.disconnectAll()
@@ -152,6 +159,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     override fun onDestroy() {
         super.onDestroy()
+        Log.d(TAG, "onDestroy: Cleaning up")
         // Clean up handler to prevent leaks
         handler.removeCallbacks(sortRunnable)
     }
@@ -281,6 +289,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun showScanView() {
+        Log.d(TAG, "showScanView: Switching to scan view")
         toolbar.title = getString(R.string.scan_title)
         contentFrame.removeAllViews()
         contentFrame.addView(scanView)
@@ -293,6 +302,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun showConnectedDevicesView() {
+        Log.d(TAG, "showConnectedDevicesView: Switching to connected devices view")
         toolbar.title = getString(R.string.connected_devices_title)
         contentFrame.removeAllViews()
         contentFrame.addView(connectedDevicesView)
@@ -305,6 +315,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun showGattServerView() {
+        Log.d(TAG, "showGattServerView: Switching to GATT server view")
         toolbar.title = getString(R.string.gatt_server_title)
         contentFrame.removeAllViews()
         contentFrame.addView(gattServerView)
@@ -317,8 +328,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun onStartScanClicked() {
+        Log.d(TAG, "onStartScanClicked: User requested to start scan")
         when {
             !bleRequirements.isBleSupported() -> {
+                Log.w(TAG, "onStartScanClicked: BLE not supported")
                 Snackbar.make(
                     recyclerView,
                     R.string.scan_error_ble_not_supported,
@@ -329,10 +342,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             }
 
             !bleRequirements.hasAllPermissions() -> {
+                Log.d(TAG, "onStartScanClicked: Requesting permissions")
                 permissionLauncher.launch(bleRequirements.requiredRuntimePermissions())
             }
 
             !bleRequirements.isBluetoothEnabled() -> {
+                Log.d(TAG, "onStartScanClicked: Requesting Bluetooth enable")
                 enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             }
 
@@ -349,17 +364,21 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun startBleScan() {
+        Log.d(TAG, "startBleScan: Starting BLE scan")
         if (!bleRequirements.hasAllPermissions()) {
+            Log.w(TAG, "startBleScan: Missing permissions, requesting")
             onStartScanClicked()
             return
         }
         if (!scannerController.startScan()) {
+            Log.w(TAG, "startBleScan: Failed to start scan")
             // If startScan returns false, it might be due to permissions
             if (!bleRequirements.hasAllPermissions()) {
                 onStartScanClicked()
             }
             return
         }
+        Log.i(TAG, "startBleScan: Scan started successfully")
         scanResults.clear()
         smoothedRssiMap.clear()
         currentDeviceOrder = emptyList()
@@ -368,10 +387,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun stopBleScan() {
+        Log.d(TAG, "stopBleScan: Stopping BLE scan")
         scannerController.stopScan()
         handler.removeCallbacks(sortRunnable)
         pendingSort = false
         updateUiForScanState()
+        Log.i(TAG, "stopBleScan: Scan stopped")
     }
 
     private fun updateUiForScanState() {
@@ -423,6 +444,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         } catch (_: SecurityException) {
             result.scanRecord?.deviceName ?: getString(R.string.scan_unknown_device)
         }
+        Log.v(TAG, "addOrUpdateResult: $address ($name), RSSI=${result.rssi}")
 
         // Calculate smoothed RSSI using exponential smoothing
         val rawRssi = result.rssi.toDouble()
@@ -515,8 +537,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     // GATT Server Controller Listener
     private fun onStartGattServerClicked() {
+        Log.d(TAG, "onStartGattServerClicked: User requested to start GATT server")
         when {
             !bleRequirements.isBleSupported() -> {
+                Log.w(TAG, "onStartGattServerClicked: BLE not supported")
                 Snackbar.make(
                     gattServerView,
                     R.string.scan_error_ble_not_supported,
@@ -524,24 +548,30 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 ).show()
             }
             !bleRequirements.hasAllPermissions() -> {
+                Log.d(TAG, "onStartGattServerClicked: Requesting permissions")
                 permissionLauncher.launch(bleRequirements.requiredRuntimePermissions())
             }
             !bleRequirements.isBluetoothEnabled() -> {
+                Log.d(TAG, "onStartGattServerClicked: Requesting Bluetooth enable")
                 enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             }
             else -> {
+                Log.d(TAG, "onStartGattServerClicked: Validating inputs and starting server")
                 // Validate and set UUID
                 val uuidString = gattServerUuidInput.text?.toString()?.trim() ?: ""
                 if (uuidString.isEmpty()) {
+                    Log.w(TAG, "onStartGattServerClicked: UUID is empty")
                     gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
                     return
                 }
 
                 try {
                     val uuid = UUID.fromString(uuidString)
+                    Log.d(TAG, "onStartGattServerClicked: Setting service UUID to $uuid")
                     gattServerController.setServiceUuid(uuid)
                     gattServerUuidLayout.error = null
                 } catch (e: IllegalArgumentException) {
+                    Log.w(TAG, "onStartGattServerClicked: Invalid UUID format: $uuidString", e)
                     gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
                     return
                 }
@@ -591,9 +621,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 // Disable button while starting to prevent multiple attempts
                 toggleGattServerButton.isEnabled = false
                 if (!gattServerController.startServer()) {
+                    Log.w(TAG, "onStartGattServerClicked: Failed to start server")
                     // Re-enable if start failed immediately
                     toggleGattServerButton.isEnabled = true
                     // Error will be reported via callback
+                } else {
+                    Log.d(TAG, "onStartGattServerClicked: Server start request sent")
                 }
                 // If startServer returns true, button will be re-enabled in onServerStarted/onServerError callbacks
             }
@@ -601,6 +634,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     override fun onServerStarted() {
+        Log.i(TAG, "onServerStarted: GATT server started successfully")
         runOnUiThread {
             toggleGattServerButton.isEnabled = true
             updateGattServerUi()
@@ -608,6 +642,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     override fun onServerStopped() {
+        Log.i(TAG, "onServerStopped: GATT server stopped")
         runOnUiThread {
             toggleGattServerButton.isEnabled = true
             updateGattServerUi()
@@ -615,6 +650,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     override fun onServerError(errorCode: Int) {
+        Log.e(TAG, "onServerError: GATT server error with errorCode=$errorCode")
         runOnUiThread {
             toggleGattServerButton.isEnabled = true
             updateGattServerUi()
@@ -642,12 +678,14 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     override fun onClientConnected(address: String) {
+        Log.i(TAG, "onClientConnected: Client connected to GATT server - $address")
         runOnUiThread {
             updateGattServerUi()
         }
     }
 
     override fun onClientDisconnected(address: String) {
+        Log.i(TAG, "onClientDisconnected: Client disconnected from GATT server - $address")
         runOnUiThread {
             updateGattServerUi()
         }
@@ -761,19 +799,29 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     // Connection Controller Listener
     private fun onConnectToDevice(address: String) {
-        val device = scanResults[address] ?: return
+        Log.d(TAG, "onConnectToDevice: User requested connection to $address")
+        val device = scanResults[address] ?: run {
+            Log.w(TAG, "onConnectToDevice: Device not found in scan results: $address")
+            return
+        }
         val bluetoothDevice = try {
             bleRequirements.bluetoothAdapter()?.getRemoteDevice(address)
         } catch (e: SecurityException) {
+            Log.e(TAG, "onConnectToDevice: SecurityException getting device", e)
             null
-        } ?: return
+        } ?: run {
+            Log.w(TAG, "onConnectToDevice: Failed to get BluetoothDevice for $address")
+            return
+        }
 
         if (connectionController.connectToDevice(bluetoothDevice)) {
+            Log.i(TAG, "onConnectToDevice: Connection initiated to $address")
             // Device info is now stored in the controller
             updateConnectedDevicesUi()
             // Navigate to connected devices view
             showConnectedDevicesView()
         } else {
+            Log.w(TAG, "onConnectToDevice: Failed to initiate connection to $address")
             Snackbar.make(
                 contentFrame,
                 getString(R.string.connection_error),
@@ -783,18 +831,21 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     override fun onDeviceConnected(address: String, name: String) {
+        Log.i(TAG, "onDeviceConnected: Device connected - $address ($name)")
         runOnUiThread {
             updateConnectedDevicesUi()
         }
     }
 
     override fun onDeviceDisconnected(address: String) {
+        Log.i(TAG, "onDeviceDisconnected: Device disconnected - $address")
         runOnUiThread {
             updateConnectedDevicesUi()
         }
     }
 
     override fun onConnectionFailed(address: String, errorCode: Int) {
+        Log.e(TAG, "onConnectionFailed: Connection failed - $address, errorCode=$errorCode")
         runOnUiThread {
             updateConnectedDevicesUi()
             Snackbar.make(

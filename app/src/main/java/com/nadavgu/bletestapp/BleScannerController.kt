@@ -1,5 +1,6 @@
 package com.nadavgu.bletestapp
 
+import android.util.Log
 import no.nordicsemi.android.support.v18.scanner.BluetoothLeScannerCompat
 import no.nordicsemi.android.support.v18.scanner.ScanCallback
 import no.nordicsemi.android.support.v18.scanner.ScanFilter
@@ -10,6 +11,9 @@ class BleScannerController(
     private val listener: Listener,
     private val bleRequirements: BleRequirements
 ) {
+    companion object {
+        private const val TAG = "BleScannerController"
+    }
 
     interface Listener {
         fun onScanResult(result: ScanResult)
@@ -29,14 +33,19 @@ class BleScannerController(
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val device = result.device
+            val rssi = result.rssi
+            Log.v(TAG, "onScanResult: ${device.address} (RSSI: $rssi)")
             listener.onScanResult(result)
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>) {
+            Log.d(TAG, "onBatchScanResults: Received ${results.size} results")
             results.forEach(listener::onScanResult)
         }
 
         override fun onScanFailed(errorCode: Int) {
+            Log.e(TAG, "onScanFailed: errorCode=$errorCode")
             scanning = false
             listener.onScanFailed(errorCode)
         }
@@ -46,26 +55,37 @@ class BleScannerController(
         get() = scanning
 
     fun startScan(): Boolean {
-        if (scanning) return false
+        if (scanning) {
+            Log.w(TAG, "startScan: Already scanning")
+            return false
+        }
         if (!bleRequirements.hasAllPermissions()) {
+            Log.w(TAG, "startScan: Missing permissions")
             return false
         }
         return try {
+            Log.i(TAG, "startScan: Starting BLE scan")
             scanner.startScan(scanFilters, scanSettings, scanCallback)
             scanning = true
             true
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            Log.e(TAG, "startScan: SecurityException", e)
             false
         }
     }
 
     fun stopScan(): Boolean {
-        if (!scanning) return false
+        if (!scanning) {
+            Log.w(TAG, "stopScan: Not scanning")
+            return false
+        }
         return try {
+            Log.i(TAG, "stopScan: Stopping BLE scan")
             scanner.stopScan(scanCallback)
             scanning = false
             true
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            Log.e(TAG, "stopScan: SecurityException", e)
             scanning = false
             false
         }
