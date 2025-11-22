@@ -15,6 +15,7 @@
     <string name="scan_item_rssi">%1$d dBm</string>
     <string name="scan_item_connectable_true">Connectable</string>
     <string name="scan_item_connectable_false">Not connectable</string>
+    <string name="scan_item_manufacturer_data_title">Manufacturer Data</string>
     <string name="scan_stop_before_exit">Stop scanning before leaving</string>
     <string name="scan_error_ble_not_supported">This device does not support Bluetooth Low Energy.</string>
     <string name="menu_scan">BLE Scanner</string>

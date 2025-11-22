@@ -13,6 +13,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.util.forEach
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.drawerlayout.widget.DrawerLayout
@@ -27,6 +28,8 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
+import androidx.core.util.isNotEmpty
+import androidx.core.util.size
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
@@ -362,13 +365,22 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }
         smoothedRssiMap[address] = smoothedRssi
 
+        // Extract all manufacturer data from scan record
+        val manufacturerDataMap = mutableMapOf<Int, ByteArray>()
+        result.scanRecord?.manufacturerSpecificData?.forEach { mfgId, data ->
+            if (data != null) {
+                manufacturerDataMap[mfgId] = data
+            }
+        }
+
         val scannedDevice = ScannedDevice(
             address = address,
             name = name,
             rssi = result.rssi, // Raw RSSI for display
             smoothedRssi = smoothedRssi, // Smoothed RSSI for sorting
             isConnectable = result.isConnectable,
-            lastSeen = System.currentTimeMillis()
+            lastSeen = System.currentTimeMillis(),
+            manufacturerData = manufacturerDataMap
         )
         scanResults[address] = scannedDevice
 

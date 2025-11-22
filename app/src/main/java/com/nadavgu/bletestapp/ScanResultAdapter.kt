@@ -18,14 +18,27 @@ class ScanResultAdapter :
         const val PAYLOAD_RSSI_CHANGED = "rssi_changed"
     }
 
+    private val expandedItems = mutableSetOf<String>()
+
+    fun isExpanded(address: String): Boolean = expandedItems.contains(address)
+
+    fun toggleExpanded(address: String) {
+        if (expandedItems.contains(address)) {
+            expandedItems.remove(address)
+        } else {
+            expandedItems.add(address)
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ScanResultViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_scan_result, parent, false)
-        return ScanResultViewHolder(view as MaterialCardView)
+        return ScanResultViewHolder(view as MaterialCardView, this)
     }
 
     override fun onBindViewHolder(holder: ScanResultViewHolder, position: Int) {
-        holder.bind(getItem(position))
+        val device = getItem(position)
+        holder.bind(device, isExpanded(device.address))
     }
 
     override fun onBindViewHolder(
@@ -39,7 +52,8 @@ class ScanResultAdapter :
             holder.updateRssi(getItem(position))
         } else {
             // Full bind
-            super.onBindViewHolder(holder, position, payloads)
+            val device = getItem(position)
+            holder.bind(device, isExpanded(device.address))
         }
     }
 
@@ -59,6 +73,7 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
         oldItem.name == newItem.name &&
         oldItem.rssi == newItem.rssi &&
         oldItem.isConnectable == newItem.isConnectable &&
+        oldItem.manufacturerData == newItem.manufacturerData &&
         // Only check lastSeen if it's significantly different (to avoid constant updates)
         kotlin.math.abs(oldItem.lastSeen - newItem.lastSeen) < 1000
 
@@ -68,6 +83,7 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
             oldItem.address == newItem.address &&
             oldItem.name == newItem.name &&
             oldItem.isConnectable == newItem.isConnectable &&
+            oldItem.manufacturerData == newItem.manufacturerData &&
             kotlin.math.abs(oldItem.lastSeen - newItem.lastSeen) < 1000
         ) {
             ScanResultAdapter.PAYLOAD_RSSI_CHANGED
@@ -77,7 +93,10 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
     }
 }
 
-class ScanResultViewHolder(private val cardView: MaterialCardView) :
+class ScanResultViewHolder(
+    private val cardView: MaterialCardView,
+    private val adapter: ScanResultAdapter
+) :
     RecyclerView.ViewHolder(cardView) {
 
     private val nameView: TextView = cardView.findViewById(R.id.deviceNameText)
@@ -85,13 +104,26 @@ class ScanResultViewHolder(private val cardView: MaterialCardView) :
     private val rssiView: TextView = cardView.findViewById(R.id.deviceRssiText)
     private val lastSeenView: TextView = cardView.findViewById(R.id.deviceLastSeenText)
     private val connectableView: TextView = cardView.findViewById(R.id.deviceConnectableText)
+    private val expandedInfoView: android.view.View = cardView.findViewById(R.id.expandedInfoView)
+    private val manufacturerDataView: TextView = cardView.findViewById(R.id.manufacturerDataText)
     
     // Track previous values to avoid unnecessary updates
     private var previousRssi: Int? = null
     private var previousLastSeen: Long? = null
     private var previousIsConnectable: Boolean? = null
 
-    fun bind(device: ScannedDevice) {
+    init {
+        cardView.setOnClickListener {
+            val position = bindingAdapterPosition
+            if (position != RecyclerView.NO_POSITION && position < adapter.itemCount) {
+                val device = adapter.currentList[position]
+                adapter.toggleExpanded(device.address)
+                adapter.notifyItemChanged(position)
+            }
+        }
+    }
+
+    fun bind(device: ScannedDevice, isExpanded: Boolean) {
         val context = cardView.context
         
         nameView.text = device.name
@@ -122,6 +154,23 @@ class ScanResultViewHolder(private val cardView: MaterialCardView) :
             }
             connectableView.setTextColor(ContextCompat.getColor(context, R.color.white))
             previousIsConnectable = device.isConnectable
+        }
+        
+        // Update expanded state
+        expandedInfoView.isVisible = isExpanded
+        if (isExpanded) {
+            // Show all manufacturer data if available
+            if (device.manufacturerData.isNotEmpty()) {
+                val manufacturerDataText = device.manufacturerData.entries.joinToString("\n") { (mfgId, data) ->
+                    val mfgIdHex = "0x%04X".format(mfgId)
+                    val dataHex = data.joinToString(" ") { "%02X".format(it) }
+                    "$mfgIdHex: $dataHex"
+                }
+                manufacturerDataView.text = manufacturerDataText
+                manufacturerDataView.isVisible = true
+            } else {
+                manufacturerDataView.isVisible = false
+            }
         }
     }
     
