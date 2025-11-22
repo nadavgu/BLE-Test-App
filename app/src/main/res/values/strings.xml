@@ -21,7 +21,15 @@
     <string name="scan_stop_before_exit">Stop scanning before leaving</string>
     <string name="scan_error_ble_not_supported">This device does not support Bluetooth Low Energy.</string>
     <string name="menu_scan">BLE Scanner</string>
+    <string name="menu_connected_devices">Connected Devices</string>
     <string name="menu_gatt_server">GATT Server</string>
+    <string name="connected_devices_title">Connected Devices</string>
+    <string name="connected_devices_empty">No devices connected</string>
+    <string name="scan_item_connect">Connect</string>
+    <string name="connected_device_disconnect">Disconnect</string>
+    <string name="connected_device_status_connected">Connected</string>
+    <string name="connected_device_status_connecting">Connecting…</string>
+    <string name="connection_error">Connection failed</string>
     <string name="gatt_server_title">BLE GATT Server</string>
     <string name="gatt_server_status_stopped">Server stopped</string>
     <string name="gatt_server_status_running">Server running</string>

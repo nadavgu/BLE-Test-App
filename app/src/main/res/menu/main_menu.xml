@@ -6,6 +6,10 @@
         android:title="@string/menu_scan"
         app:showAsAction="never" />
     <item
+        android:id="@+id/menu_connected_devices"
+        android:title="@string/menu_connected_devices"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/menu_gatt_server"
         android:title="@string/menu_gatt_server"
         app:showAsAction="never" />

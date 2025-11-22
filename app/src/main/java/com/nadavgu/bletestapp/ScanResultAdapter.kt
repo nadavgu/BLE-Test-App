@@ -9,10 +9,12 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
-class ScanResultAdapter :
-    ListAdapter<ScannedDevice, ScanResultViewHolder>(ScanResultDiffCallback) {
+class ScanResultAdapter(
+    private val onConnectClick: (String) -> Unit
+) : ListAdapter<ScannedDevice, ScanResultViewHolder>(ScanResultDiffCallback) {
 
     companion object {
         const val PAYLOAD_RSSI_CHANGED = "rssi_changed"
@@ -33,7 +35,7 @@ class ScanResultAdapter :
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ScanResultViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_scan_result, parent, false)
-        return ScanResultViewHolder(view as MaterialCardView, this)
+        return ScanResultViewHolder(view as MaterialCardView, this, onConnectClick)
     }
 
     override fun onBindViewHolder(holder: ScanResultViewHolder, position: Int) {
@@ -97,7 +99,8 @@ private object ScanResultDiffCallback : DiffUtil.ItemCallback<ScannedDevice>() {
 
 class ScanResultViewHolder(
     private val cardView: MaterialCardView,
-    private val adapter: ScanResultAdapter
+    private val adapter: ScanResultAdapter,
+    private val onConnectClick: (String) -> Unit
 ) :
     RecyclerView.ViewHolder(cardView) {
 
@@ -105,7 +108,7 @@ class ScanResultViewHolder(
     private val addressView: TextView = cardView.findViewById(R.id.deviceAddressText)
     private val rssiView: TextView = cardView.findViewById(R.id.deviceRssiText)
     private val lastSeenView: TextView = cardView.findViewById(R.id.deviceLastSeenText)
-    private val connectableView: TextView = cardView.findViewById(R.id.deviceConnectableText)
+    private val connectButton: MaterialButton = cardView.findViewById(R.id.deviceConnectButton)
     private val expandedInfoView: android.view.View = cardView.findViewById(R.id.expandedInfoView)
     private val manufacturerDataView: TextView = cardView.findViewById(R.id.manufacturerDataText)
     private val serviceUuidsView: TextView = cardView.findViewById(R.id.serviceUuidsText)
@@ -122,6 +125,16 @@ class ScanResultViewHolder(
                 val device = adapter.currentList[position]
                 adapter.toggleExpanded(device.address)
                 adapter.notifyItemChanged(position)
+            }
+        }
+        
+        connectButton.setOnClickListener {
+            val position = bindingAdapterPosition
+            if (position != RecyclerView.NO_POSITION && position < adapter.itemCount) {
+                val device = adapter.currentList[position]
+                if (device.isConnectable) {
+                    onConnectClick(device.address)
+                }
             }
         }
     }
@@ -145,17 +158,17 @@ class ScanResultViewHolder(
             previousLastSeen = device.lastSeen
         }
         
-        // Only update connectable badge if it changed
+        // Update connect button based on connectable state
         if (previousIsConnectable != device.isConnectable) {
-            connectableView.isVisible = true
             if (device.isConnectable) {
-                connectableView.text = context.getString(R.string.scan_item_connectable_true)
-                connectableView.setBackgroundResource(R.drawable.connectable_badge)
+                connectButton.text = context.getString(R.string.scan_item_connect)
+                connectButton.isEnabled = true
+                connectButton.isVisible = true
             } else {
-                connectableView.text = context.getString(R.string.scan_item_connectable_false)
-                connectableView.setBackgroundResource(R.drawable.non_connectable_badge)
+                connectButton.text = context.getString(R.string.scan_item_connectable_false)
+                connectButton.isEnabled = false
+                connectButton.isVisible = true
             }
-            connectableView.setTextColor(ContextCompat.getColor(context, R.color.white))
             previousIsConnectable = device.isConnectable
         }
         

@@ -31,7 +31,7 @@ import java.util.UUID
 import androidx.core.util.isNotEmpty
 import androidx.core.util.size
 
-class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, NavigationView.OnNavigationItemSelectedListener {
+class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener, NavigationView.OnNavigationItemSelectedListener {
 
     companion object {
         private const val SORT_DEBOUNCE_MS = 1_500L // Re-sort every 1.5 seconds
@@ -67,7 +67,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var toggleGattServerButton: MaterialButton
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
-    private val resultsAdapter = ScanResultAdapter()
+    private lateinit var resultsAdapter: ScanResultAdapter
+
+    // Connected devices
+    private lateinit var connectedDevicesAdapter: ConnectedDeviceAdapter
 
     // Track smoothed RSSI values for each device
     private val smoothedRssiMap = mutableMapOf<String, Double>()
@@ -78,6 +81,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var bleRequirements: BleRequirements
     private lateinit var scannerController: BleScannerController
     private lateinit var gattServerController: BleGattServerController
+    private lateinit var connectionController: BleConnectionController
+
+    // Connected devices view components
+    private lateinit var connectedDevicesView: View
+    private lateinit var connectedDevicesStatusText: TextView
+    private lateinit var connectedDevicesEmptyStateCard: MaterialCardView
+    private lateinit var connectedDevicesRecyclerView: RecyclerView
 
     private var receivedDataHistory = StringBuilder()
 
@@ -113,12 +123,20 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         bleRequirements = BleRequirements(this)
         scannerController = BleScannerController(this, bleRequirements)
         gattServerController = BleGattServerController(this, this)
+        connectionController = BleConnectionController(this, this)
+        resultsAdapter = ScanResultAdapter { address ->
+            onConnectToDevice(address)
+        }
+        connectedDevicesAdapter = ConnectedDeviceAdapter { address ->
+            connectionController.disconnectDevice(address)
+        }
         bindViews()
         configureToolbar()
         setupViews()
         showScanView()
         updateUiForScanState()
         updateGattServerUi()
+        updateConnectedDevicesUi()
     }
 
     override fun onStart() {
@@ -129,6 +147,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         super.onStop()
         stopBleScan()
         gattServerController.stopServer()
+        connectionController.disconnectAll()
     }
 
     override fun onDestroy() {
@@ -202,6 +221,17 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             }
         }
 
+        // Inflate connected devices view
+        connectedDevicesView = layoutInflater.inflate(R.layout.view_connected_devices, contentFrame, false)
+        connectedDevicesStatusText = connectedDevicesView.findViewById(R.id.connectedDevicesStatusText)
+        connectedDevicesEmptyStateCard = connectedDevicesView.findViewById(R.id.connectedDevicesEmptyStateCard)
+        connectedDevicesRecyclerView = connectedDevicesView.findViewById(R.id.connectedDevicesRecyclerView)
+        
+        connectedDevicesRecyclerView.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = connectedDevicesAdapter
+        }
+
         // Setup navigation
         navigationView.setNavigationItemSelectedListener(this)
     }
@@ -236,6 +266,11 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 drawerLayout.closeDrawer(GravityCompat.START)
                 return true
             }
+            R.id.menu_connected_devices -> {
+                showConnectedDevicesView()
+                drawerLayout.closeDrawer(GravityCompat.START)
+                return true
+            }
             R.id.menu_gatt_server -> {
                 showGattServerView()
                 drawerLayout.closeDrawer(GravityCompat.START)
@@ -251,7 +286,22 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         contentFrame.addView(scanView)
         // Update menu selection
         navigationView.menu.findItem(R.id.menu_scan)?.isChecked = true
+        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = false
         navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = false
+        // Ensure scan UI is updated
+        updateUiForScanState()
+    }
+
+    private fun showConnectedDevicesView() {
+        toolbar.title = getString(R.string.connected_devices_title)
+        contentFrame.removeAllViews()
+        contentFrame.addView(connectedDevicesView)
+        // Update menu selection
+        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = false
+        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = true
+        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = false
+        // Ensure connected devices UI is updated
+        updateConnectedDevicesUi()
     }
 
     private fun showGattServerView() {
@@ -260,7 +310,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         contentFrame.addView(gattServerView)
         // Update menu selection
         navigationView.menu.findItem(R.id.menu_scan)?.isChecked = false
+        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = false
         navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = true
+        // Ensure GATT server UI is updated
+        updateGattServerUi()
     }
 
     private fun onStartScanClicked() {
@@ -704,6 +757,64 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }.toByteArray()
         
         return data
+    }
+
+    // Connection Controller Listener
+    private fun onConnectToDevice(address: String) {
+        val device = scanResults[address] ?: return
+        val bluetoothDevice = try {
+            bleRequirements.bluetoothAdapter()?.getRemoteDevice(address)
+        } catch (e: SecurityException) {
+            null
+        } ?: return
+
+        if (connectionController.connectToDevice(bluetoothDevice)) {
+            // Device info is now stored in the controller
+            updateConnectedDevicesUi()
+            // Navigate to connected devices view
+            showConnectedDevicesView()
+        } else {
+            Snackbar.make(
+                contentFrame,
+                getString(R.string.connection_error),
+                Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    override fun onDeviceConnected(address: String, name: String) {
+        runOnUiThread {
+            updateConnectedDevicesUi()
+        }
+    }
+
+    override fun onDeviceDisconnected(address: String) {
+        runOnUiThread {
+            updateConnectedDevicesUi()
+        }
+    }
+
+    override fun onConnectionFailed(address: String, errorCode: Int) {
+        runOnUiThread {
+            updateConnectedDevicesUi()
+            Snackbar.make(
+                contentFrame,
+                getString(R.string.connection_error),
+                Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun updateConnectedDevicesUi() {
+        val devices = connectionController.getConnectedDevices()
+        val deviceCount = devices.size
+        connectedDevicesStatusText.text = "$deviceCount ${if (deviceCount == 1) "device connected" else "devices connected"}"
+        
+        connectedDevicesEmptyStateCard.isVisible = devices.isEmpty()
+        // Convert DeviceInfo to ConnectedDevice for the adapter
+        connectedDevicesAdapter.submitList(devices.map { 
+            ConnectedDevice(it.address, it.name, it.isConnecting) 
+        })
     }
 }
 

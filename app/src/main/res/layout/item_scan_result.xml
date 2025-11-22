@@ -58,19 +58,20 @@
                 android:textStyle="bold"
                 tools:text="-45 dBm" />
 
-            <TextView
-                android:id="@+id/deviceConnectableText"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/deviceConnectButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
                 android:paddingStart="12dp"
                 android:paddingTop="6dp"
                 android:paddingEnd="12dp"
                 android:paddingBottom="6dp"
-                android:textAppearance="?attr/textAppearanceBody2"
-                android:textColor="@color/white"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                tools:text="@string/scan_item_connectable_true" />
+                app:cornerRadius="16dp"
+                tools:text="@string/scan_item_connect" />
         </LinearLayout>
 
         <TextView
