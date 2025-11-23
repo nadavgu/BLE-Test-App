@@ -28,8 +28,6 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
-import androidx.core.util.isNotEmpty
-import androidx.core.util.size
 import android.util.Log
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener, NavigationView.OnNavigationItemSelectedListener {
@@ -90,6 +88,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var connectedDevicesStatusText: TextView
     private lateinit var connectedDevicesEmptyStateCard: MaterialCardView
     private lateinit var connectedDevicesRecyclerView: RecyclerView
+    private lateinit var connectByAddressInput: com.google.android.material.textfield.TextInputEditText
+    private lateinit var connectByAddressLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var connectByAddressButton: MaterialButton
 
     private var receivedDataHistory = StringBuilder()
 
@@ -242,10 +243,17 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         connectedDevicesStatusText = connectedDevicesView.findViewById(R.id.connectedDevicesStatusText)
         connectedDevicesEmptyStateCard = connectedDevicesView.findViewById(R.id.connectedDevicesEmptyStateCard)
         connectedDevicesRecyclerView = connectedDevicesView.findViewById(R.id.connectedDevicesRecyclerView)
+        connectByAddressInput = connectedDevicesView.findViewById(R.id.connectByAddressInput)
+        connectByAddressLayout = connectedDevicesView.findViewById(R.id.connectByAddressLayout)
+        connectByAddressButton = connectedDevicesView.findViewById(R.id.connectByAddressButton)
         
         connectedDevicesRecyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = connectedDevicesAdapter
+        }
+        
+        connectByAddressButton.setOnClickListener {
+            onConnectByAddressClicked()
         }
 
         // Setup navigation
@@ -812,24 +820,61 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             Log.w(TAG, "onConnectToDevice: Device not found in scan results: $address")
             return
         }
+        connectToDeviceByAddress(address)
+    }
+    
+    private fun onConnectByAddressClicked() {
+        val addressText = connectByAddressInput.text?.toString()?.trim() ?: ""
+        
+        if (addressText.isEmpty()) {
+            connectByAddressLayout.error = getString(R.string.connected_devices_address_empty)
+            return
+        }
+        
+        // Validate MAC address format (XX:XX:XX:XX:XX:XX)
+        val macAddressPattern = "^([0-9A-Fa-f]{2}:){5}([0-9A-Fa-f]{2})$".toRegex()
+        if (!macAddressPattern.matches(addressText)) {
+            connectByAddressLayout.error = getString(R.string.connected_devices_address_invalid)
+            return
+        }
+        
+        connectByAddressLayout.error = null
+        
+        Log.d(TAG, "onConnectByAddressClicked: User requested connection to $addressText")
+        connectToDeviceByAddress(addressText)
+    }
+    
+    private fun connectToDeviceByAddress(address: String) {
         val bluetoothDevice = try {
             bleRequirements.bluetoothAdapter()?.getRemoteDevice(address)
         } catch (e: SecurityException) {
-            Log.e(TAG, "onConnectToDevice: SecurityException getting device", e)
+            Log.e(TAG, "connectToDeviceByAddress: SecurityException getting device", e)
+            null
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "connectToDeviceByAddress: Invalid address format: $address", e)
             null
         } ?: run {
-            Log.w(TAG, "onConnectToDevice: Failed to get BluetoothDevice for $address")
+            Log.w(TAG, "connectToDeviceByAddress: Failed to get BluetoothDevice for $address")
+            Snackbar.make(
+                contentFrame,
+                getString(R.string.connected_devices_address_invalid),
+                Snackbar.LENGTH_LONG
+            ).show()
             return
         }
 
         if (connectionController.connectToDevice(bluetoothDevice)) {
-            Log.i(TAG, "onConnectToDevice: Connection initiated to $address")
+            Log.i(TAG, "connectToDeviceByAddress: Connection initiated to $address")
+            // Clear the input field
+            connectByAddressInput.setText("")
             // Device info is now stored in the controller
             updateConnectedDevicesUi()
-            // Navigate to connected devices view
-            showConnectedDevicesView()
+            // Navigate to connected devices view if not already there
+            if (contentFrame.indexOfChild(connectedDevicesView) == -1) {
+                showConnectedDevicesView()
+            }
         } else {
-            Log.w(TAG, "onConnectToDevice: Failed to initiate connection to $address")
+            Log.w(TAG, "connectToDeviceByAddress: Failed to initiate connection to $address")
             Snackbar.make(
                 contentFrame,
                 getString(R.string.connection_error),
