@@ -7,27 +7,20 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.view.MenuItem
-import android.view.View
-import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.util.forEach
-import androidx.core.view.GravityCompat
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.material3.MaterialTheme
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.navigation.NavigationView
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
 import android.util.Log
 
-class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener, NavigationView.OnNavigationItemSelectedListener {
+class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener {
 
     companion object {
         private const val TAG = "MainActivity"
@@ -35,18 +28,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         private const val RSSI_SMOOTHING_ALPHA = 0.3 // Exponential smoothing factor (0.0-1.0)
     }
 
-    private lateinit var drawerLayout: DrawerLayout
-    private lateinit var navigationView: NavigationView
-    private lateinit var toolbar: MaterialToolbar
-    private lateinit var contentFrame: FrameLayout
+    private var currentDestination by mutableStateOf(NavigationDestination.SCAN)
 
-    // Scan view components
-    private lateinit var scanView: ComposeView
+    // Scan state
     private var scanDevicesState by mutableStateOf<List<ScannedDevice>>(emptyList())
     private var isScanningState by mutableStateOf(false)
 
-    // GATT Server view components
-    private lateinit var gattServerView: ComposeView
+    // GATT Server state
     private var gattServerState by mutableStateOf(GattServerState())
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
@@ -63,8 +51,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var gattServerController: BleGattServerController
     private lateinit var connectionController: BleConnectionController
 
-    // Connected devices view
-    private lateinit var connectedDevicesView: ComposeView
 
     private var receivedDataHistory = StringBuilder()
 
@@ -98,15 +84,101 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate: Initializing MainActivity")
-        setContentView(R.layout.activity_main)
         bleRequirements = BleRequirements(this)
         scannerController = BleScannerController(this, bleRequirements)
         gattServerController = BleGattServerController(this, this)
         connectionController = BleConnectionController(this, this)
-        bindViews()
-        configureToolbar()
-        setupViews()
-        showScanView()
+        
+        // Initialize state with current values
+        gattServerState = gattServerState.copy(
+            serviceUuid = gattServerController.getServiceUuid().toString(),
+            manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "",
+            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: ""
+        )
+        
+        setContent {
+            MaterialTheme {
+                MainScreen(
+                    currentDestination = currentDestination,
+                    onDestinationChange = { destination ->
+                        currentDestination = destination
+                        when (destination) {
+                            NavigationDestination.SCAN -> {
+                                updateUiForScanState()
+                            }
+                            NavigationDestination.CONNECTED_DEVICES -> {
+                                updateConnectedDevicesUi()
+                            }
+                            NavigationDestination.GATT_SERVER -> {
+                                updateGattServerUi()
+                            }
+                        }
+                    },
+                    scanScreen = {
+                        ScanScreen(
+                            devices = scanDevicesState,
+                            isScanning = isScanningState,
+                            onToggleScan = {
+                                if (scannerController.isScanning) {
+                                    stopBleScan()
+                                } else {
+                                    ensureBluetoothEnabledAndScan()
+                                }
+                            },
+                            onConnectClick = { address ->
+                                onConnectToDevice(address)
+                            }
+                        )
+                    },
+                    connectedDevicesScreen = {
+                        ConnectedDevicesScreen(
+                            devices = connectedDevicesState,
+                            onConnectByAddress = { address ->
+                                onConnectByAddress(address)
+                            },
+                            onDisconnect = { address ->
+                                connectionController.disconnectDevice(address)
+                            },
+                            onRemove = { address ->
+                                connectionController.removeDisconnectedDevice(address)
+                                updateConnectedDevicesUi()
+                            }
+                        )
+                    },
+                    gattServerScreen = {
+                        GattServerScreen(
+                            state = gattServerState,
+                            onUuidChange = { uuid ->
+                                gattServerState = gattServerState.copy(
+                                    serviceUuid = uuid,
+                                    uuidError = null
+                                )
+                            },
+                            onManufacturerIdChange = { id ->
+                                gattServerState = gattServerState.copy(
+                                    manufacturerId = id,
+                                    manufacturerIdError = null
+                                )
+                            },
+                            onManufacturerDataChange = { data ->
+                                gattServerState = gattServerState.copy(
+                                    manufacturerData = data,
+                                    manufacturerDataError = null
+                                )
+                            },
+                            onToggleServer = {
+                                if (gattServerController.isRunning) {
+                                    gattServerController.stopServer()
+                                } else {
+                                    onStartGattServerClicked()
+                                }
+                            }
+                        )
+                    }
+                )
+            }
+        }
+        
         updateUiForScanState()
         updateGattServerUi()
         updateConnectedDevicesUi()
@@ -133,180 +205,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         handler.removeCallbacks(sortRunnable)
     }
 
-    private fun bindViews() {
-        drawerLayout = findViewById(R.id.drawerLayout)
-        navigationView = findViewById(R.id.navigationView)
-        toolbar = findViewById(R.id.mainToolbar)
-        contentFrame = findViewById(R.id.contentFrame)
-    }
-
-    private fun setupViews() {
-        // Create Compose scan view
-        scanView = ComposeView(this).apply {
-            setContent {
-                MaterialTheme {
-                    ScanScreen(
-                        devices = scanDevicesState,
-                        isScanning = isScanningState,
-                        onToggleScan = {
-                            if (scannerController.isScanning) {
-                                stopBleScan()
-                            } else {
-                                ensureBluetoothEnabledAndScan()
-                            }
-                        },
-                        onConnectClick = { address ->
-                            onConnectToDevice(address)
-                        }
-                    )
-                }
-            }
-        }
-
-        // Create Compose GATT server view
-        gattServerView = ComposeView(this).apply {
-            setContent {
-                MaterialTheme {
-                    GattServerScreen(
-                        state = gattServerState,
-                        onUuidChange = { uuid ->
-                            gattServerState = gattServerState.copy(
-                                serviceUuid = uuid,
-                                uuidError = null
-                            )
-                        },
-                        onManufacturerIdChange = { id ->
-                            gattServerState = gattServerState.copy(
-                                manufacturerId = id,
-                                manufacturerIdError = null
-                            )
-                        },
-                        onManufacturerDataChange = { data ->
-                            gattServerState = gattServerState.copy(
-                                manufacturerData = data,
-                                manufacturerDataError = null
-                            )
-                        },
-                        onToggleServer = {
-                            if (gattServerController.isRunning) {
-                                gattServerController.stopServer()
-                            } else {
-                                onStartGattServerClicked()
-                            }
-                        }
-                    )
-                }
-            }
-        }
-        
-        // Initialize state with current values
-        gattServerState = gattServerState.copy(
-            serviceUuid = gattServerController.getServiceUuid().toString(),
-            manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "",
-            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: ""
-        )
-
-        // Compose-based connected devices view
-        connectedDevicesView = ComposeView(this).apply {
-            setContent {
-                androidx.compose.material3.MaterialTheme {
-                    ConnectedDevicesScreen(
-                        devices = connectedDevicesState,
-                        onConnectByAddress = { address ->
-                            onConnectByAddress(address)
-                        },
-                        onDisconnect = { address ->
-                            connectionController.disconnectDevice(address)
-                        },
-                        onRemove = { address ->
-                            connectionController.removeDisconnectedDevice(address)
-                            updateConnectedDevicesUi()
-                        }
-                    )
-                }
-            }
-        }
-
-        // Setup navigation
-        navigationView.setNavigationItemSelectedListener(this)
-    }
-
-    private fun configureToolbar() {
-        setSupportActionBar(toolbar)
-        toolbar.setNavigationIcon(R.drawable.ic_menu)
-        toolbar.setNavigationOnClickListener {
-            drawerLayout.openDrawer(GravityCompat.START)
-        }
-    }
-
-
-    override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_scan -> {
-                showScanView()
-                drawerLayout.closeDrawer(GravityCompat.START)
-                return true
-            }
-            R.id.menu_connected_devices -> {
-                showConnectedDevicesView()
-                drawerLayout.closeDrawer(GravityCompat.START)
-                return true
-            }
-            R.id.menu_gatt_server -> {
-                showGattServerView()
-                drawerLayout.closeDrawer(GravityCompat.START)
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun showScanView() {
-        Log.d(TAG, "showScanView: Switching to scan view")
-        toolbar.title = getString(R.string.scan_title)
-        contentFrame.removeAllViews()
-        contentFrame.addView(scanView)
-        // Update menu selection
-        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = true
-        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = false
-        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = false
-        // Ensure scan UI is updated
-        updateUiForScanState()
-    }
-
-    private fun showConnectedDevicesView() {
-        Log.d(TAG, "showConnectedDevicesView: Switching to connected devices view")
-        toolbar.title = getString(R.string.connected_devices_title)
-        contentFrame.removeAllViews()
-        contentFrame.addView(connectedDevicesView)
-        // Update menu selection
-        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = false
-        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = true
-        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = false
-        // Ensure connected devices UI is updated
-        updateConnectedDevicesUi()
-    }
-
-    private fun showGattServerView() {
-        Log.d(TAG, "showGattServerView: Switching to GATT server view")
-        toolbar.title = getString(R.string.gatt_server_title)
-        contentFrame.removeAllViews()
-        contentFrame.addView(gattServerView)
-        // Update menu selection
-        navigationView.menu.findItem(R.id.menu_scan)?.isChecked = false
-        navigationView.menu.findItem(R.id.menu_connected_devices)?.isChecked = false
-        navigationView.menu.findItem(R.id.menu_gatt_server)?.isChecked = true
-        // Ensure GATT server UI is updated
-        updateGattServerUi()
-    }
 
     private fun onStartScanClicked() {
         Log.d(TAG, "onStartScanClicked: User requested to start scan")
         when {
             !bleRequirements.isBleSupported() -> {
                 Log.w(TAG, "onStartScanClicked: BLE not supported")
+                val rootView = window.decorView.rootView
                 Snackbar.make(
-                    contentFrame,
+                    rootView,
                     R.string.scan_error_ble_not_supported,
                     Snackbar.LENGTH_LONG
                 ).setAction(R.string.scan_settings_button) {
@@ -374,8 +281,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun showPermissionDenied() {
+        val rootView = window.decorView.rootView
         Snackbar.make(
-            contentFrame,
+            rootView,
             R.string.scan_error_permission_denied,
             Snackbar.LENGTH_LONG
         ).setAction(R.string.scan_open_settings_button) {
@@ -388,8 +296,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun showBluetoothRequired() {
+        val rootView = window.decorView.rootView
         Snackbar.make(
-            contentFrame,
+            rootView,
             R.string.scan_error_bluetooth_disabled,
             Snackbar.LENGTH_LONG
         ).show()
@@ -485,8 +394,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     override fun onScanFailed(errorCode: Int) {
         runOnUiThread {
             updateUiForScanState()
+            val rootView = window.decorView.rootView
             Snackbar.make(
-                contentFrame,
+                rootView,
                 getString(R.string.scan_error_generic, errorCode),
                 Snackbar.LENGTH_LONG
             ).show()
@@ -499,8 +409,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         when {
             !bleRequirements.isBleSupported() -> {
                 Log.w(TAG, "onStartGattServerClicked: BLE not supported")
+                val rootView = window.decorView.rootView
                 Snackbar.make(
-                    gattServerView,
+                    rootView,
                     R.string.scan_error_ble_not_supported,
                     Snackbar.LENGTH_LONG
                 ).show()
@@ -635,8 +546,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
                 else -> "Server error (code $errorCode)"
             }
+            val rootView = window.decorView.rootView
             Snackbar.make(
-                contentFrame,
+                rootView,
                 errorMessage,
                 Snackbar.LENGTH_LONG
             ).show()
@@ -771,8 +683,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             null
         } ?: run {
             Log.w(TAG, "connectToDeviceByAddress: Failed to get BluetoothDevice for $address")
+            val rootView = window.decorView.rootView
             Snackbar.make(
-                contentFrame,
+                rootView,
                 getString(R.string.connected_devices_address_invalid),
                 Snackbar.LENGTH_LONG
             ).show()
@@ -784,13 +697,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             // Device info is now stored in the controller
             updateConnectedDevicesUi()
             // Navigate to connected devices view if not already there
-            if (contentFrame.indexOfChild(connectedDevicesView) == -1) {
-                showConnectedDevicesView()
+            if (currentDestination != NavigationDestination.CONNECTED_DEVICES) {
+                currentDestination = NavigationDestination.CONNECTED_DEVICES
+                updateConnectedDevicesUi()
             }
         } else {
             Log.w(TAG, "connectToDeviceByAddress: Failed to initiate connection to $address")
+            val rootView = window.decorView.rootView
             Snackbar.make(
-                contentFrame,
+                rootView,
                 getString(R.string.connection_error),
                 Snackbar.LENGTH_LONG
             ).show()
@@ -815,8 +730,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         Log.e(TAG, "onConnectionFailed: Connection failed - $address, errorCode=$errorCode")
         runOnUiThread {
             updateConnectedDevicesUi()
+            val rootView = window.decorView.rootView
             Snackbar.make(
-                contentFrame,
+                rootView,
                 getString(R.string.connection_error),
                 Snackbar.LENGTH_LONG
             ).show()
