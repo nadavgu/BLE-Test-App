@@ -21,14 +21,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
-import androidx.recyclerview.widget.DividerItemDecoration
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.material3.MaterialTheme
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
@@ -48,17 +45,14 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var contentFrame: FrameLayout
 
     // Scan view components
-    private lateinit var scanView: View
-    private lateinit var statusText: TextView
-    private lateinit var progressIndicator: CircularProgressIndicator
-    private lateinit var emptyStateCard: MaterialCardView
-    private lateinit var toggleScanButton: MaterialButton
-    private lateinit var recyclerView: RecyclerView
+    private lateinit var scanView: ComposeView
+    private var scanDevicesState by mutableStateOf<List<ScannedDevice>>(emptyList())
+    private var isScanningState by mutableStateOf(false)
 
     // GATT Server view components
     private lateinit var gattServerView: View
     private lateinit var gattServerStatusText: TextView
-    private lateinit var gattServerProgressIndicator: CircularProgressIndicator
+    private lateinit var gattServerProgressIndicator: com.google.android.material.progressindicator.CircularProgressIndicator
     private lateinit var gattServerAddressText: TextView
     private lateinit var gattServerConnectedClientsText: TextView
     private lateinit var gattServerDataReceivedText: TextView
@@ -71,7 +65,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var toggleGattServerButton: MaterialButton
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
-    private lateinit var resultsAdapter: ScanResultAdapter
     private var connectedDevicesState by mutableStateOf<List<ConnectedDevice>>(emptyList())
 
     // Track smoothed RSSI values for each device
@@ -125,9 +118,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         scannerController = BleScannerController(this, bleRequirements)
         gattServerController = BleGattServerController(this, this)
         connectionController = BleConnectionController(this, this)
-        resultsAdapter = ScanResultAdapter { address ->
-            onConnectToDevice(address)
-        }
         bindViews()
         configureToolbar()
         setupViews()
@@ -166,25 +156,30 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun setupViews() {
-        // Inflate scan view
-        scanView = layoutInflater.inflate(R.layout.view_scan, contentFrame, false)
-        statusText = scanView.findViewById(R.id.scanStatusText)
-        progressIndicator = scanView.findViewById(R.id.scanProgressIndicator)
-        emptyStateCard = scanView.findViewById(R.id.emptyStateCard)
-        toggleScanButton = scanView.findViewById(R.id.toggleScanButton)
-        recyclerView = scanView.findViewById(R.id.scanResultsRecyclerView)
-
-        configureRecyclerView()
-        toggleScanButton.setOnClickListener {
-            if (scannerController.isScanning) {
-                stopBleScan()
-            } else {
-                onStartScanClicked()
+        // Create Compose scan view
+        scanView = ComposeView(this).apply {
+            setContent {
+                MaterialTheme {
+                    ScanScreen(
+                        devices = scanDevicesState,
+                        isScanning = isScanningState,
+                        onToggleScan = {
+                            if (scannerController.isScanning) {
+                                stopBleScan()
+                            } else {
+                                ensureBluetoothEnabledAndScan()
+                            }
+                        },
+                        onConnectClick = { address ->
+                            onConnectToDevice(address)
+                        }
+                    )
+                }
             }
         }
 
         // Inflate GATT server view
-        gattServerView = layoutInflater.inflate(R.layout.view_gatt_server, contentFrame, false)
+        gattServerView = layoutInflater.inflate(R.layout.view_gatt_server, contentFrame, false) as View
         gattServerStatusText = gattServerView.findViewById(R.id.gattServerStatusText)
         gattServerProgressIndicator = gattServerView.findViewById(R.id.gattServerProgressIndicator)
         gattServerAddressText = gattServerView.findViewById(R.id.gattServerAddressText)
@@ -256,20 +251,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }
     }
 
-    private fun configureRecyclerView() {
-        recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = resultsAdapter
-            // Disable item animations to prevent flickering during RSSI updates
-            itemAnimator = null
-            addItemDecoration(
-                DividerItemDecoration(
-                    context,
-                    DividerItemDecoration.VERTICAL
-                )
-            )
-        }
-    }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
@@ -337,7 +318,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             !bleRequirements.isBleSupported() -> {
                 Log.w(TAG, "onStartScanClicked: BLE not supported")
                 Snackbar.make(
-                    recyclerView,
+                    contentFrame,
                     R.string.scan_error_ble_not_supported,
                     Snackbar.LENGTH_LONG
                 ).setAction(R.string.scan_settings_button) {
@@ -386,7 +367,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         scanResults.clear()
         smoothedRssiMap.clear()
         currentDeviceOrder = emptyList()
-        resultsAdapter.submitDevices(emptyList())
+        scanDevicesState = emptyList()
         updateUiForScanState()
     }
 
@@ -400,27 +381,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun updateUiForScanState() {
-        val scanning = scannerController.isScanning
-        progressIndicator.isVisible = scanning
-        toggleScanButton.apply {
-            isEnabled = true
-            text = if (scanning) {
-                getString(R.string.scan_stop_button)
-            } else {
-                getString(R.string.scan_start_button)
-            }
-        }
-        statusText.text = if (scanning) {
-            getString(R.string.scan_status_scanning)
-        } else {
-            getString(R.string.scan_status_idle)
-        }
-        emptyStateCard.isVisible = scanResults.isEmpty() && !scanning
+        isScanningState = scannerController.isScanning
+        // Compose UI will automatically update based on state
     }
 
     private fun showPermissionDenied() {
         Snackbar.make(
-            recyclerView,
+            contentFrame,
             R.string.scan_error_permission_denied,
             Snackbar.LENGTH_LONG
         ).setAction(R.string.scan_open_settings_button) {
@@ -434,7 +401,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     private fun showBluetoothRequired() {
         Snackbar.make(
-            recyclerView,
+            contentFrame,
             R.string.scan_error_bluetooth_disabled,
             Snackbar.LENGTH_LONG
         ).show()
@@ -520,8 +487,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                     }
         }
         currentDeviceOrder = devices
-        resultsAdapter.submitDevices(devices)
-        emptyStateCard.isVisible = scanResults.isEmpty() && !scannerController.isScanning
+        scanDevicesState = devices
     }
 
     override fun onScanResult(result: ScanResult) {
@@ -532,7 +498,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         runOnUiThread {
             updateUiForScanState()
             Snackbar.make(
-                recyclerView,
+                contentFrame,
                 getString(R.string.scan_error_generic, errorCode),
                 Snackbar.LENGTH_LONG
             ).show()
