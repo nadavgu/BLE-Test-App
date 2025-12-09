@@ -59,6 +59,9 @@
     <string name="gatt_server_uuid_title">Service UUID</string>
     <string name="gatt_server_uuid_hint">Enter service UUID (e.g., 0000180F-0000-1000-8000-00805F9B34FB)</string>
     <string name="gatt_server_uuid_invalid">Invalid UUID format</string>
+    <string name="gatt_server_advanced_params_title">Advanced Parameters</string>
+    <string name="gatt_server_advanced_params_expand">Expand</string>
+    <string name="gatt_server_advanced_params_collapse">Collapse</string>
     <string name="gatt_server_manufacturer_data_title">Manufacturer Data (Optional)</string>
     <string name="gatt_server_manufacturer_id_hint">Manufacturer ID (hex, e.g., 0x004C)</string>
     <string name="gatt_server_manufacturer_data_hint">Data bytes (hex, e.g., 01 02 03)</string>

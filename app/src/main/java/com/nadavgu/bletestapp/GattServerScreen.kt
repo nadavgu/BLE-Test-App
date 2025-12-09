@@ -1,8 +1,15 @@
 package com.nadavgu.bletestapp
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +43,7 @@ fun GattServerScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showAdvancedParams by remember { mutableStateOf(false) }
     
     Column(
         modifier = modifier
@@ -105,7 +113,7 @@ fun GattServerScreen(
             }
         }
         
-        // UUID input card
+        // Advanced parameters card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -117,80 +125,108 @@ fun GattServerScreen(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text(
-                    text = context.getString(R.string.gatt_server_uuid_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                OutlinedTextField(
-                    value = state.serviceUuid,
-                    onValueChange = onUuidChange,
-                    label = { Text(context.getString(R.string.gatt_server_uuid_hint)) },
-                    enabled = !state.isRunning,
-                    isError = state.uuidError != null,
-                    supportingText = state.uuidError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    ),
-                    singleLine = true
-                )
-            }
-        }
-        
-        // Manufacturer data card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = context.getString(R.string.gatt_server_manufacturer_data_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                OutlinedTextField(
-                    value = state.manufacturerId,
-                    onValueChange = onManufacturerIdChange,
-                    label = { Text(context.getString(R.string.gatt_server_manufacturer_id_hint)) },
-                    enabled = !state.isRunning,
-                    isError = state.manufacturerIdError != null,
-                    supportingText = state.manufacturerIdError?.let { { Text(it) } },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    ),
-                    singleLine = true
-                )
+                        .clickable { showAdvancedParams = !showAdvancedParams },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = context.getString(R.string.gatt_server_advanced_params_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = if (showAdvancedParams) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (showAdvancedParams) {
+                            context.getString(R.string.gatt_server_advanced_params_collapse)
+                        } else {
+                            context.getString(R.string.gatt_server_advanced_params_expand)
+                        }
+                    )
+                }
                 
-                OutlinedTextField(
-                    value = state.manufacturerData,
-                    onValueChange = onManufacturerDataChange,
-                    label = { Text(context.getString(R.string.gatt_server_manufacturer_data_hint)) },
-                    enabled = !state.isRunning,
-                    isError = state.manufacturerDataError != null,
-                    supportingText = state.manufacturerDataError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    ),
-                    singleLine = true
-                )
+                AnimatedVisibility(
+                    visible = showAdvancedParams,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                    ) {
+                        // Service UUID field
+                        Text(
+                            text = context.getString(R.string.gatt_server_uuid_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = state.serviceUuid,
+                            onValueChange = onUuidChange,
+                            label = { Text(context.getString(R.string.gatt_server_uuid_hint)) },
+                            enabled = !state.isRunning,
+                            isError = state.uuidError != null,
+                            supportingText = state.uuidError?.let { { Text(it) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Manufacturer data fields
+                        Text(
+                            text = context.getString(R.string.gatt_server_manufacturer_data_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = state.manufacturerId,
+                            onValueChange = onManufacturerIdChange,
+                            label = { Text(context.getString(R.string.gatt_server_manufacturer_id_hint)) },
+                            placeholder = { Text("0x004C") },
+                            enabled = !state.isRunning,
+                            isError = state.manufacturerIdError != null,
+                            supportingText = state.manufacturerIdError?.let { { Text(it) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                        
+                        OutlinedTextField(
+                            value = state.manufacturerData,
+                            onValueChange = onManufacturerDataChange,
+                            label = { Text(context.getString(R.string.gatt_server_manufacturer_data_hint)) },
+                            placeholder = { Text("01 02 03") },
+                            enabled = !state.isRunning,
+                            isError = state.manufacturerDataError != null,
+                            supportingText = state.manufacturerDataError?.let { { Text(it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                    }
+                }
             }
         }
         

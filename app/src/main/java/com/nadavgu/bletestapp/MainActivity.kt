@@ -90,11 +90,11 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         gattServerController = BleGattServerController(this, this)
         connectionController = BleConnectionController(this, this)
         
-        // Initialize state with current values
+        // Initialize state with current values or defaults
         gattServerState = gattServerState.copy(
             serviceUuid = gattServerController.getServiceUuid().toString(),
-            manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "",
-            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: ""
+            manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "0x004C",
+            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03"
         )
         
         setContent {
