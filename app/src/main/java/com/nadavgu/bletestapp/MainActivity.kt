@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
@@ -97,7 +98,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         )
         
         setContent {
-            MaterialTheme {
+            MaterialTheme(
+                colorScheme = darkColorScheme()
+            ) {
                 MainScreen(
                     currentDestination = currentDestination,
                     onDestinationChange = { destination ->
