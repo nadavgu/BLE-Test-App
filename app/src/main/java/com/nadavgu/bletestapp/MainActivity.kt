@@ -10,12 +10,10 @@ import android.provider.Settings
 import android.view.MenuItem
 import android.view.View
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.util.forEach
 import androidx.core.view.GravityCompat
-import androidx.core.view.isVisible
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,8 +21,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.material3.MaterialTheme
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
@@ -50,19 +46,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private var isScanningState by mutableStateOf(false)
 
     // GATT Server view components
-    private lateinit var gattServerView: View
-    private lateinit var gattServerStatusText: TextView
-    private lateinit var gattServerProgressIndicator: com.google.android.material.progressindicator.CircularProgressIndicator
-    private lateinit var gattServerAddressText: TextView
-    private lateinit var gattServerConnectedClientsText: TextView
-    private lateinit var gattServerDataReceivedText: TextView
-    private lateinit var gattServerUuidInput: com.google.android.material.textfield.TextInputEditText
-    private lateinit var gattServerUuidLayout: com.google.android.material.textfield.TextInputLayout
-    private lateinit var gattServerManufacturerIdInput: com.google.android.material.textfield.TextInputEditText
-    private lateinit var gattServerManufacturerIdLayout: com.google.android.material.textfield.TextInputLayout
-    private lateinit var gattServerManufacturerDataInput: com.google.android.material.textfield.TextInputEditText
-    private lateinit var gattServerManufacturerDataLayout: com.google.android.material.textfield.TextInputLayout
-    private lateinit var toggleGattServerButton: MaterialButton
+    private lateinit var gattServerView: ComposeView
+    private var gattServerState by mutableStateOf(GattServerState())
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private var connectedDevicesState by mutableStateOf<List<ConnectedDevice>>(emptyList())
@@ -178,45 +163,48 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             }
         }
 
-        // Inflate GATT server view
-        gattServerView = layoutInflater.inflate(R.layout.view_gatt_server, contentFrame, false) as View
-        gattServerStatusText = gattServerView.findViewById(R.id.gattServerStatusText)
-        gattServerProgressIndicator = gattServerView.findViewById(R.id.gattServerProgressIndicator)
-        gattServerAddressText = gattServerView.findViewById(R.id.gattServerAddressText)
-        gattServerConnectedClientsText = gattServerView.findViewById(R.id.gattServerConnectedClientsText)
-        gattServerDataReceivedText = gattServerView.findViewById(R.id.gattServerDataReceivedText)
-            gattServerUuidInput = gattServerView.findViewById(R.id.gattServerUuidInput)
-            gattServerUuidLayout = gattServerView.findViewById(R.id.gattServerUuidLayout)
-            gattServerManufacturerIdInput = gattServerView.findViewById(R.id.gattServerManufacturerIdInput)
-            gattServerManufacturerIdLayout = gattServerView.findViewById(R.id.gattServerManufacturerIdLayout)
-            gattServerManufacturerDataInput = gattServerView.findViewById(R.id.gattServerManufacturerDataInput)
-            gattServerManufacturerDataLayout = gattServerView.findViewById(R.id.gattServerManufacturerDataLayout)
-            toggleGattServerButton = gattServerView.findViewById(R.id.toggleGattServerButton)
-            
-            // Initialize UUID input with current UUID
-            gattServerUuidInput.setText(gattServerController.getServiceUuid().toString())
-            
-            // Initialize Manufacturer ID and Data inputs with current values
-            gattServerController.getManufacturerId()?.let { id ->
-                gattServerManufacturerIdInput.setText("0x%04X".format(id))
-                gattServerController.getManufacturerData()?.let { data ->
-                    val dataHex = data.joinToString(" ") { "%02X".format(it) }
-                    gattServerManufacturerDataInput.setText(dataHex)
-                } ?: run {
-                    gattServerManufacturerDataInput.setText("")
+        // Create Compose GATT server view
+        gattServerView = ComposeView(this).apply {
+            setContent {
+                MaterialTheme {
+                    GattServerScreen(
+                        state = gattServerState,
+                        onUuidChange = { uuid ->
+                            gattServerState = gattServerState.copy(
+                                serviceUuid = uuid,
+                                uuidError = null
+                            )
+                        },
+                        onManufacturerIdChange = { id ->
+                            gattServerState = gattServerState.copy(
+                                manufacturerId = id,
+                                manufacturerIdError = null
+                            )
+                        },
+                        onManufacturerDataChange = { data ->
+                            gattServerState = gattServerState.copy(
+                                manufacturerData = data,
+                                manufacturerDataError = null
+                            )
+                        },
+                        onToggleServer = {
+                            if (gattServerController.isRunning) {
+                                gattServerController.stopServer()
+                            } else {
+                                onStartGattServerClicked()
+                            }
+                        }
+                    )
                 }
-            } ?: run {
-                gattServerManufacturerIdInput.setText("")
-                gattServerManufacturerDataInput.setText("")
-            }
-
-        toggleGattServerButton.setOnClickListener {
-            if (gattServerController.isRunning) {
-                gattServerController.stopServer()
-            } else {
-                onStartGattServerClicked()
             }
         }
+        
+        // Initialize state with current values
+        gattServerState = gattServerState.copy(
+            serviceUuid = gattServerController.getServiceUuid().toString(),
+            manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "",
+            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: ""
+        )
 
         // Compose-based connected devices view
         connectedDevicesView = ComposeView(this).apply {
@@ -528,10 +516,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             else -> {
                 Log.d(TAG, "onStartGattServerClicked: Validating inputs and starting server")
                 // Validate and set UUID
-                val uuidString = gattServerUuidInput.text?.toString()?.trim() ?: ""
+                val uuidString = gattServerState.serviceUuid.trim()
                 if (uuidString.isEmpty()) {
                     Log.w(TAG, "onStartGattServerClicked: UUID is empty")
-                    gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
+                    gattServerState = gattServerState.copy(
+                        uuidError = getString(R.string.gatt_server_uuid_invalid)
+                    )
                     return
                 }
 
@@ -539,25 +529,31 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                     val uuid = UUID.fromString(uuidString)
                     Log.d(TAG, "onStartGattServerClicked: Setting service UUID to $uuid")
                     gattServerController.setServiceUuid(uuid)
-                    gattServerUuidLayout.error = null
+                    gattServerState = gattServerState.copy(uuidError = null)
                 } catch (e: IllegalArgumentException) {
                     Log.w(TAG, "onStartGattServerClicked: Invalid UUID format: $uuidString", e)
-                    gattServerUuidLayout.error = getString(R.string.gatt_server_uuid_invalid)
+                    gattServerState = gattServerState.copy(
+                        uuidError = getString(R.string.gatt_server_uuid_invalid)
+                    )
                     return
                 }
                 
                 // Parse and set manufacturer data if provided
-                val manufacturerIdString = gattServerManufacturerIdInput.text?.toString()?.trim() ?: ""
-                val manufacturerDataString = gattServerManufacturerDataInput.text?.toString()?.trim() ?: ""
+                val manufacturerIdString = gattServerState.manufacturerId.trim()
+                val manufacturerDataString = gattServerState.manufacturerData.trim()
                 
                 if (manufacturerIdString.isNotEmpty() || manufacturerDataString.isNotEmpty()) {
                     // Both fields must be provided if one is provided
                     if (manufacturerIdString.isEmpty()) {
-                        gattServerManufacturerIdLayout.error = getString(R.string.gatt_server_manufacturer_id_invalid)
+                        gattServerState = gattServerState.copy(
+                            manufacturerIdError = getString(R.string.gatt_server_manufacturer_id_invalid)
+                        )
                         return
                     }
                     if (manufacturerDataString.isEmpty()) {
-                        gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        gattServerState = gattServerState.copy(
+                            manufacturerDataError = getString(R.string.gatt_server_manufacturer_data_invalid)
+                        )
                         return
                     }
                     
@@ -568,13 +564,19 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                             // Error already reported via callback
                             return
                         }
-                        gattServerManufacturerIdLayout.error = null
-                        gattServerManufacturerDataLayout.error = null
+                        gattServerState = gattServerState.copy(
+                            manufacturerIdError = null,
+                            manufacturerDataError = null
+                        )
                     } catch (e: IllegalArgumentException) {
                         if (e.message?.contains("ID") == true) {
-                            gattServerManufacturerIdLayout.error = getString(R.string.gatt_server_manufacturer_id_invalid)
+                            gattServerState = gattServerState.copy(
+                                manufacturerIdError = getString(R.string.gatt_server_manufacturer_id_invalid)
+                            )
                         } else {
-                            gattServerManufacturerDataLayout.error = getString(R.string.gatt_server_manufacturer_data_invalid)
+                            gattServerState = gattServerState.copy(
+                                manufacturerDataError = getString(R.string.gatt_server_manufacturer_data_invalid)
+                            )
                         }
                         return
                     }
@@ -584,21 +586,18 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                         // Error already reported via callback
                         return
                     }
-                    gattServerManufacturerIdLayout.error = null
-                    gattServerManufacturerDataLayout.error = null
+                    gattServerState = gattServerState.copy(
+                        manufacturerIdError = null,
+                        manufacturerDataError = null
+                    )
                 }
                 
-                // Disable button while starting to prevent multiple attempts
-                toggleGattServerButton.isEnabled = false
                 if (!gattServerController.startServer()) {
                     Log.w(TAG, "onStartGattServerClicked: Failed to start server")
-                    // Re-enable if start failed immediately
-                    toggleGattServerButton.isEnabled = true
                     // Error will be reported via callback
                 } else {
                     Log.d(TAG, "onStartGattServerClicked: Server start request sent")
                 }
-                // If startServer returns true, button will be re-enabled in onServerStarted/onServerError callbacks
             }
         }
     }
@@ -606,7 +605,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     override fun onServerStarted() {
         Log.i(TAG, "onServerStarted: GATT server started successfully")
         runOnUiThread {
-            toggleGattServerButton.isEnabled = true
             updateGattServerUi()
         }
     }
@@ -614,7 +612,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     override fun onServerStopped() {
         Log.i(TAG, "onServerStopped: GATT server stopped")
         runOnUiThread {
-            toggleGattServerButton.isEnabled = true
             updateGattServerUi()
         }
     }
@@ -622,7 +619,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     override fun onServerError(errorCode: Int) {
         Log.e(TAG, "onServerError: GATT server error with errorCode=$errorCode")
         runOnUiThread {
-            toggleGattServerButton.isEnabled = true
             updateGattServerUi()
             val errorMessage = when (errorCode) {
                 -1 -> "Unknown error occurred"
@@ -640,7 +636,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                 else -> "Server error (code $errorCode)"
             }
             Snackbar.make(
-                gattServerView,
+                contentFrame,
                 errorMessage,
                 Snackbar.LENGTH_LONG
             ).show()
@@ -668,44 +664,26 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             if (receivedDataHistory.length > 1000) {
                 receivedDataHistory.delete(0, receivedDataHistory.length - 1000)
             }
-            gattServerDataReceivedText.text = receivedDataHistory.toString()
+            gattServerState = gattServerState.copy(
+                dataReceived = receivedDataHistory.toString()
+            )
         }
     }
 
     private fun updateGattServerUi() {
         val running = gattServerController.isRunning
-        gattServerProgressIndicator.isVisible = running
-        toggleGattServerButton.apply {
-            isEnabled = true
-            text = if (running) {
-                getString(R.string.gatt_server_stop_button)
-            } else {
-                getString(R.string.gatt_server_start_button)
-            }
-        }
-        gattServerStatusText.text = if (running) {
-            getString(R.string.gatt_server_status_running)
-        } else {
-            getString(R.string.gatt_server_status_stopped)
-        }
-
-        val address = gattServerController.getServerAddress() ?: "Unknown"
-        gattServerAddressText.text = "Address: $address"
-
+        val address = gattServerController.getServerAddress()
         val clientCount = gattServerController.connectedClientCount
-        gattServerConnectedClientsText.text = getString(R.string.gatt_server_connected_clients, clientCount)
         
-        // Enable/disable UUID and manufacturer data inputs based on server state
-        gattServerUuidInput.isEnabled = !running
-        gattServerManufacturerIdInput.isEnabled = !running
-        gattServerManufacturerDataInput.isEnabled = !running
-        
-        // Clear errors when server state changes
-        if (!running) {
-            gattServerUuidLayout.error = null
-            gattServerManufacturerIdLayout.error = null
-            gattServerManufacturerDataLayout.error = null
-        }
+        gattServerState = gattServerState.copy(
+            isRunning = running,
+            serverAddress = address,
+            connectedClientCount = clientCount,
+            // Clear errors when server state changes
+            uuidError = if (!running) null else gattServerState.uuidError,
+            manufacturerIdError = if (!running) null else gattServerState.manufacturerIdError,
+            manufacturerDataError = if (!running) null else gattServerState.manufacturerDataError
+        )
     }
 
     private fun parseManufacturerId(input: String): Int {
