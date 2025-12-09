@@ -694,13 +694,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
         if (connectionController.connectToDevice(bluetoothDevice)) {
             Log.i(TAG, "connectToDeviceByAddress: Connection initiated to $address")
-            // Device info is now stored in the controller
-            updateConnectedDevicesUi()
             // Navigate to connected devices view if not already there
             if (currentDestination != NavigationDestination.CONNECTED_DEVICES) {
                 currentDestination = NavigationDestination.CONNECTED_DEVICES
-                updateConnectedDevicesUi()
             }
+            // Device info is now stored in the controller
+            updateConnectedDevicesUi()
         } else {
             Log.w(TAG, "connectToDeviceByAddress: Failed to initiate connection to $address")
             val rootView = window.decorView.rootView
