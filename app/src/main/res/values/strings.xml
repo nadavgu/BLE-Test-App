@@ -25,6 +25,7 @@
     <string name="menu_gatt_server">GATT Server</string>
     <string name="connected_devices_title">Connected Devices</string>
     <string name="connected_devices_empty">No devices connected</string>
+    <string name="connected_devices_status_format">%1$d devices connected</string>
     <string name="connected_devices_connect_by_address_title">Connect to Device</string>
     <string name="connected_devices_address_hint">Device MAC address (e.g., AA:BB:CC:DD:EE:FF)</string>
     <string name="connected_devices_connect_button">Connect</string>

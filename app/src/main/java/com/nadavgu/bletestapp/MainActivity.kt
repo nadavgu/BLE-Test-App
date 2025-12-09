@@ -17,6 +17,10 @@ import androidx.core.util.forEach
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -68,9 +72,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
     private val scanResults = linkedMapOf<String, ScannedDevice>()
     private lateinit var resultsAdapter: ScanResultAdapter
-
-    // Connected devices
-    private lateinit var connectedDevicesAdapter: ConnectedDeviceAdapter
+    private var connectedDevicesState by mutableStateOf<List<ConnectedDevice>>(emptyList())
 
     // Track smoothed RSSI values for each device
     private val smoothedRssiMap = mutableMapOf<String, Double>()
@@ -83,14 +85,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     private lateinit var gattServerController: BleGattServerController
     private lateinit var connectionController: BleConnectionController
 
-    // Connected devices view components
-    private lateinit var connectedDevicesView: View
-    private lateinit var connectedDevicesStatusText: TextView
-    private lateinit var connectedDevicesEmptyStateCard: MaterialCardView
-    private lateinit var connectedDevicesRecyclerView: RecyclerView
-    private lateinit var connectByAddressInput: com.google.android.material.textfield.TextInputEditText
-    private lateinit var connectByAddressLayout: com.google.android.material.textfield.TextInputLayout
-    private lateinit var connectByAddressButton: MaterialButton
+    // Connected devices view
+    private lateinit var connectedDevicesView: ComposeView
 
     private var receivedDataHistory = StringBuilder()
 
@@ -131,17 +127,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         connectionController = BleConnectionController(this, this)
         resultsAdapter = ScanResultAdapter { address ->
             onConnectToDevice(address)
-        }
-        connectedDevicesAdapter = ConnectedDeviceAdapter { address ->
-            val device = connectionController.getConnectedDevices().find { it.address == address }
-            if (device?.isDisconnected == true) {
-                // Remove disconnected device from list
-                connectionController.removeDisconnectedDevice(address)
-                updateConnectedDevicesUi()
-            } else {
-                // Disconnect active device
-                connectionController.disconnectDevice(address)
-            }
         }
         bindViews()
         configureToolbar()
@@ -238,22 +223,25 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             }
         }
 
-        // Inflate connected devices view
-        connectedDevicesView = layoutInflater.inflate(R.layout.view_connected_devices, contentFrame, false)
-        connectedDevicesStatusText = connectedDevicesView.findViewById(R.id.connectedDevicesStatusText)
-        connectedDevicesEmptyStateCard = connectedDevicesView.findViewById(R.id.connectedDevicesEmptyStateCard)
-        connectedDevicesRecyclerView = connectedDevicesView.findViewById(R.id.connectedDevicesRecyclerView)
-        connectByAddressInput = connectedDevicesView.findViewById(R.id.connectByAddressInput)
-        connectByAddressLayout = connectedDevicesView.findViewById(R.id.connectByAddressLayout)
-        connectByAddressButton = connectedDevicesView.findViewById(R.id.connectByAddressButton)
-        
-        connectedDevicesRecyclerView.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = connectedDevicesAdapter
-        }
-        
-        connectByAddressButton.setOnClickListener {
-            onConnectByAddressClicked()
+        // Compose-based connected devices view
+        connectedDevicesView = ComposeView(this).apply {
+            setContent {
+                androidx.compose.material3.MaterialTheme {
+                    ConnectedDevicesScreen(
+                        devices = connectedDevicesState,
+                        onConnectByAddress = { address ->
+                            onConnectByAddress(address)
+                        },
+                        onDisconnect = { address ->
+                            connectionController.disconnectDevice(address)
+                        },
+                        onRemove = { address ->
+                            connectionController.removeDisconnectedDevice(address)
+                            updateConnectedDevicesUi()
+                        }
+                    )
+                }
+            }
         }
 
         // Setup navigation
@@ -822,26 +810,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }
         connectToDeviceByAddress(address)
     }
-    
-    private fun onConnectByAddressClicked() {
-        val addressText = connectByAddressInput.text?.toString()?.trim() ?: ""
-        
-        if (addressText.isEmpty()) {
-            connectByAddressLayout.error = getString(R.string.connected_devices_address_empty)
-            return
-        }
-        
-        // Validate MAC address format (XX:XX:XX:XX:XX:XX)
-        val macAddressPattern = "^([0-9A-Fa-f]{2}:){5}([0-9A-Fa-f]{2})$".toRegex()
-        if (!macAddressPattern.matches(addressText)) {
-            connectByAddressLayout.error = getString(R.string.connected_devices_address_invalid)
-            return
-        }
-        
-        connectByAddressLayout.error = null
-        
-        Log.d(TAG, "onConnectByAddressClicked: User requested connection to $addressText")
-        connectToDeviceByAddress(addressText)
+
+    private fun onConnectByAddress(address: String) {
+        Log.d(TAG, "onConnectByAddress: User requested connection to $address")
+        connectToDeviceByAddress(address)
     }
     
     private fun connectToDeviceByAddress(address: String) {
@@ -865,8 +837,6 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
 
         if (connectionController.connectToDevice(bluetoothDevice)) {
             Log.i(TAG, "connectToDeviceByAddress: Connection initiated to $address")
-            // Clear the input field
-            connectByAddressInput.setText("")
             // Device info is now stored in the controller
             updateConnectedDevicesUi()
             // Navigate to connected devices view if not already there
@@ -910,13 +880,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     }
 
     private fun updateConnectedDevicesUi() {
-        val devices = connectionController.getConnectedDevices()
-        val deviceCount = devices.size
-        connectedDevicesStatusText.text = "$deviceCount ${if (deviceCount == 1) "device connected" else "devices connected"}"
-        
-        connectedDevicesEmptyStateCard.isVisible = devices.isEmpty()
-        // Devices are already ConnectedDevice objects, no conversion needed
-        connectedDevicesAdapter.submitList(devices)
+        connectedDevicesState = connectionController.getConnectedDevices()
     }
 }
 
