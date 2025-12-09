@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,16 +23,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.UUID
 
+data class ScanFiltersState(
+    val serviceUuid: String = "",
+    val manufacturerId: String = "",
+    val manufacturerData: String = "",
+    val serviceUuidError: String? = null,
+    val manufacturerIdError: String? = null,
+    val manufacturerDataError: String? = null
+)
+
 @Composable
 fun ScanScreen(
     devices: List<ScannedDevice>,
     isScanning: Boolean,
+    scanFilters: ScanFiltersState,
     onToggleScan: () -> Unit,
     onConnectClick: (String) -> Unit,
+    onServiceUuidChange: (String) -> Unit,
+    onManufacturerIdChange: (String) -> Unit,
+    onManufacturerDataChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val expandedItems = remember { mutableSetOf<String>() }
+    var showAdvancedParams by remember { mutableStateOf(false) }
     
     Column(
         modifier = modifier
@@ -59,6 +76,124 @@ fun ScanScreen(
                     modifier = Modifier.size(40.dp),
                     strokeWidth = 3.dp
                 )
+            }
+        }
+        
+        // Advanced parameters card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvancedParams = !showAdvancedParams },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = context.getString(R.string.scan_advanced_params_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = if (showAdvancedParams) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (showAdvancedParams) {
+                            context.getString(R.string.scan_advanced_params_collapse)
+                        } else {
+                            context.getString(R.string.scan_advanced_params_expand)
+                        }
+                    )
+                }
+                
+                AnimatedVisibility(
+                    visible = showAdvancedParams,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                    ) {
+                        // Service UUID filter
+                        Text(
+                            text = context.getString(R.string.scan_filter_service_uuid_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = scanFilters.serviceUuid,
+                            onValueChange = onServiceUuidChange,
+                            label = { Text(context.getString(R.string.scan_filter_service_uuid_hint)) },
+                            placeholder = { Text("0000180F-0000-1000-8000-00805F9B34FB") },
+                            enabled = !isScanning,
+                            isError = scanFilters.serviceUuidError != null,
+                            supportingText = scanFilters.serviceUuidError?.let { { Text(it) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Manufacturer data filters
+                        Text(
+                            text = context.getString(R.string.scan_filter_manufacturer_data_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = scanFilters.manufacturerId,
+                            onValueChange = onManufacturerIdChange,
+                            label = { Text(context.getString(R.string.scan_filter_manufacturer_id_hint)) },
+                            placeholder = { Text("0x004C") },
+                            enabled = !isScanning,
+                            isError = scanFilters.manufacturerIdError != null,
+                            supportingText = scanFilters.manufacturerIdError?.let { { Text(it) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                        
+                        OutlinedTextField(
+                            value = scanFilters.manufacturerData,
+                            onValueChange = onManufacturerDataChange,
+                            label = { Text(context.getString(R.string.scan_filter_manufacturer_data_hint)) },
+                            placeholder = { Text("01 02 03") },
+                            enabled = !isScanning,
+                            isError = scanFilters.manufacturerDataError != null,
+                            supportingText = scanFilters.manufacturerDataError?.let { { Text(it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+                    }
+                }
             }
         }
         

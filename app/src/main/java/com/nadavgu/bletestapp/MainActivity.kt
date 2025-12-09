@@ -34,6 +34,11 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
     // Scan state
     private var scanDevicesState by mutableStateOf<List<ScannedDevice>>(emptyList())
     private var isScanningState by mutableStateOf(false)
+    private var scanFiltersState by mutableStateOf(ScanFiltersState(
+        serviceUuid = "0000180F-0000-1000-8000-00805F9B34FB",
+        manufacturerId = "0x004C",
+        manufacturerData = "01 02 03"
+    ))
 
     // GATT Server state
     private var gattServerState by mutableStateOf(GattServerState())
@@ -121,6 +126,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                         ScanScreen(
                             devices = scanDevicesState,
                             isScanning = isScanningState,
+                            scanFilters = scanFiltersState,
                             onToggleScan = {
                                 if (scannerController.isScanning) {
                                     stopBleScan()
@@ -130,6 +136,24 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                             },
                             onConnectClick = { address ->
                                 onConnectToDevice(address)
+                            },
+                            onServiceUuidChange = { uuid ->
+                                scanFiltersState = scanFiltersState.copy(
+                                    serviceUuid = uuid,
+                                    serviceUuidError = null
+                                )
+                            },
+                            onManufacturerIdChange = { id ->
+                                scanFiltersState = scanFiltersState.copy(
+                                    manufacturerId = id,
+                                    manufacturerIdError = null
+                                )
+                            },
+                            onManufacturerDataChange = { data ->
+                                scanFiltersState = scanFiltersState.copy(
+                                    manufacturerData = data,
+                                    manufacturerDataError = null
+                                )
                             }
                         )
                     },
@@ -253,6 +277,12 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             onStartScanClicked()
             return
         }
+        
+        // Build scan filters from state
+        val filters = buildScanFilters()
+        scannerController.setScanFilters(filters)
+        Log.d(TAG, "startBleScan: Applied ${filters.size} scan filters")
+        
         if (!scannerController.startScan()) {
             Log.w(TAG, "startBleScan: Failed to start scan")
             // If startScan returns false, it might be due to permissions
@@ -267,6 +297,77 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         currentDeviceOrder = emptyList()
         scanDevicesState = emptyList()
         updateUiForScanState()
+    }
+    
+    private fun buildScanFilters(): List<no.nordicsemi.android.support.v18.scanner.ScanFilter> {
+        val filters = mutableListOf<no.nordicsemi.android.support.v18.scanner.ScanFilter>()
+        
+        // Service UUID filter
+        val serviceUuidString = scanFiltersState.serviceUuid.trim()
+        if (serviceUuidString.isNotEmpty()) {
+            try {
+                val uuid = UUID.fromString(serviceUuidString)
+                val filter = no.nordicsemi.android.support.v18.scanner.ScanFilter.Builder()
+                    .setServiceUuid(android.os.ParcelUuid(uuid))
+                    .build()
+                filters.add(filter)
+                Log.d(TAG, "buildScanFilters: Added service UUID filter: $uuid")
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "buildScanFilters: Invalid service UUID: $serviceUuidString", e)
+                runOnUiThread {
+                    scanFiltersState = scanFiltersState.copy(
+                        serviceUuidError = getString(R.string.scan_filter_service_uuid_invalid)
+                    )
+                }
+            }
+        }
+        
+        // Manufacturer data filter
+        val manufacturerIdString = scanFiltersState.manufacturerId.trim()
+        val manufacturerDataString = scanFiltersState.manufacturerData.trim()
+        
+        if (manufacturerIdString.isNotEmpty() || manufacturerDataString.isNotEmpty()) {
+            if (manufacturerIdString.isEmpty()) {
+                runOnUiThread {
+                    scanFiltersState = scanFiltersState.copy(
+                        manufacturerIdError = getString(R.string.scan_filter_manufacturer_id_invalid)
+                    )
+                }
+                return filters // Return what we have so far
+            }
+            
+            try {
+                val manufacturerId = parseManufacturerId(manufacturerIdString)
+                val data = if (manufacturerDataString.isNotEmpty()) {
+                    parseManufacturerDataBytes(manufacturerDataString)
+                } else {
+                    byteArrayOf() // Empty data is valid
+                }
+                
+                val filter = no.nordicsemi.android.support.v18.scanner.ScanFilter.Builder()
+                    .setManufacturerData(manufacturerId, data)
+                    .build()
+                filters.add(filter)
+                Log.d(TAG, "buildScanFilters: Added manufacturer data filter: ID=0x%04X, data size=${data.size}".format(manufacturerId))
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "buildScanFilters: Invalid manufacturer data", e)
+                if (e.message?.contains("ID") == true) {
+                    runOnUiThread {
+                        scanFiltersState = scanFiltersState.copy(
+                            manufacturerIdError = getString(R.string.scan_filter_manufacturer_id_invalid)
+                        )
+                    }
+                } else {
+                    runOnUiThread {
+                        scanFiltersState = scanFiltersState.copy(
+                            manufacturerDataError = getString(R.string.scan_filter_manufacturer_data_invalid)
+                        )
+                    }
+                }
+            }
+        }
+        
+        return filters
     }
 
     private fun stopBleScan() {

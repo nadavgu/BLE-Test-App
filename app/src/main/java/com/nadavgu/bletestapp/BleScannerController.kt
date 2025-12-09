@@ -27,9 +27,18 @@ class BleScannerController(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
     }
-    private val scanFilters = listOf<ScanFilter>()
+    private var scanFilters = listOf<ScanFilter>()
 
     private var scanning = false
+    
+    fun setScanFilters(filters: List<ScanFilter>) {
+        if (scanning) {
+            Log.w(TAG, "setScanFilters: Cannot change filters while scanning")
+            return
+        }
+        Log.d(TAG, "setScanFilters: Setting ${filters.size} scan filters")
+        scanFilters = filters
+    }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
