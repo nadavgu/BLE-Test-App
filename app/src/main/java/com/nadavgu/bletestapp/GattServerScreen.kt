@@ -25,10 +25,15 @@ data class GattServerState(
     val serverAddress: String? = null,
     val connectedClientCount: Int = 0,
     val serviceUuid: String = "",
+    val readWriteUuid: String = "",
+    val notifyUuid: String = "",
+    val includeNotifyCharacteristic: Boolean = true,
     val manufacturerId: String = "",
     val manufacturerData: String = "",
     val dataReceived: String = "",
     val uuidError: String? = null,
+    val readWriteUuidError: String? = null,
+    val notifyUuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null
 )
@@ -37,6 +42,9 @@ data class GattServerState(
 fun GattServerScreen(
     state: GattServerState,
     onUuidChange: (String) -> Unit,
+    onReadWriteUuidChange: (String) -> Unit,
+    onNotifyUuidChange: (String) -> Unit,
+    onIncludeNotifyChange: (Boolean) -> Unit,
     onManufacturerIdChange: (String) -> Unit,
     onManufacturerDataChange: (String) -> Unit,
     onToggleServer: () -> Unit,
@@ -182,6 +190,77 @@ fun GattServerScreen(
                             singleLine = true
                         )
                         
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Characteristics section
+                        Text(
+                            text = context.getString(R.string.gatt_server_characteristics_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = state.readWriteUuid,
+                            onValueChange = onReadWriteUuidChange,
+                            label = { Text(context.getString(R.string.gatt_server_read_write_uuid_hint)) },
+                            placeholder = { Text("00002A19-0000-1000-8000-00805F9B34FB") },
+                            enabled = !state.isRunning,
+                            isError = state.readWriteUuidError != null,
+                            supportingText = state.readWriteUuidError?.let { { Text(it) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp
+                            ),
+                            singleLine = true
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = context.getString(R.string.gatt_server_notify_toggle_label),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = state.includeNotifyCharacteristic,
+                                onCheckedChange = onIncludeNotifyChange,
+                                enabled = !state.isRunning
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = state.includeNotifyCharacteristic,
+                            enter = expandVertically(),
+                            exit = shrinkVertically()
+                        ) {
+                            OutlinedTextField(
+                                value = state.notifyUuid,
+                                onValueChange = onNotifyUuidChange,
+                                label = { Text(context.getString(R.string.gatt_server_notify_uuid_hint)) },
+                                placeholder = { Text("00002A1A-0000-1000-8000-00805F9B34FB") },
+                                enabled = !state.isRunning,
+                                isError = state.notifyUuidError != null,
+                                supportingText = state.notifyUuidError?.let { { Text(it) } },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp
+                                ),
+                                singleLine = true
+                            )
+                        }
+
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
                         // Manufacturer data fields

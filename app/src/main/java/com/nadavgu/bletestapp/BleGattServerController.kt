@@ -43,9 +43,10 @@ class BleGattServerController(
     private var manufacturerId: Int? = null
     private var manufacturerData: ByteArray? = null
     
-    // Characteristic UUIDs
-    private val READ_WRITE_CHARACTERISTIC_UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
-    private val NOTIFY_CHARACTERISTIC_UUID = UUID.fromString("00002A1A-0000-1000-8000-00805F9B34FB")
+    // Characteristic UUIDs (configurable)
+    private var readWriteCharacteristicUuid: UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
+    private var notifyCharacteristicUuid: UUID = UUID.fromString("00002A1A-0000-1000-8000-00805F9B34FB")
+    private var includeNotifyCharacteristic: Boolean = true
 
     private var serverManager: MyBleServerManager? = null
     private var isServerRunning = false
@@ -76,27 +77,30 @@ class BleGattServerController(
 
             // Create read/write characteristic
             val readWriteCharacteristic = BluetoothGattCharacteristic(
-                READ_WRITE_CHARACTERISTIC_UUID,
+                readWriteCharacteristicUuid,
                 BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
                 BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE
             )
 
             // Create notify characteristic
-            val notifyCharacteristic = BluetoothGattCharacteristic(
-                NOTIFY_CHARACTERISTIC_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PERMISSION_READ
-            )
+            if (includeNotifyCharacteristic) {
+                val notifyCharacteristic = BluetoothGattCharacteristic(
+                    notifyCharacteristicUuid,
+                    BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                    BluetoothGattCharacteristic.PERMISSION_READ
+                )
 
-            // Add descriptor for notifications
-            val descriptor = BluetoothGattDescriptor(
-                UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"), // CLIENT_CHARACTERISTIC_CONFIG_UUID
-                BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-            )
-            notifyCharacteristic.addDescriptor(descriptor)
+                // Add descriptor for notifications
+                val descriptor = BluetoothGattDescriptor(
+                    UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"), // CLIENT_CHARACTERISTIC_CONFIG_UUID
+                    BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+                )
+                notifyCharacteristic.addDescriptor(descriptor)
+
+                service.addCharacteristic(notifyCharacteristic)
+            }
 
             service.addCharacteristic(readWriteCharacteristic)
-            service.addCharacteristic(notifyCharacteristic)
 
             Log.d(TAG, "initializeServer: Service initialized with ${service.characteristics.size} characteristics")
             return listOf(service)
@@ -147,6 +151,12 @@ class BleGattServerController(
 
     fun getServiceUuid(): UUID = serviceUuid
 
+    fun getReadWriteCharacteristicUuid(): UUID = readWriteCharacteristicUuid
+
+    fun getNotifyCharacteristicUuid(): UUID = notifyCharacteristicUuid
+
+    fun isNotifyCharacteristicIncluded(): Boolean = includeNotifyCharacteristic
+
     fun getManufacturerId(): Int? = manufacturerId
     
     fun getManufacturerData(): ByteArray? = manufacturerData
@@ -160,6 +170,22 @@ class BleGattServerController(
         Log.d(TAG, "setManufacturerData: Setting manufacturer ID=$manufacturerId, data size=${data?.size ?: 0}")
         this.manufacturerId = manufacturerId
         this.manufacturerData = data
+        return true
+    }
+
+    fun setCharacteristicUuids(
+        readWriteUuid: UUID,
+        notifyUuid: UUID,
+        includeNotify: Boolean
+    ): Boolean {
+        if (isServerRunning) {
+            Log.w(TAG, "setCharacteristicUuids: Cannot change characteristics while server is running")
+            return false
+        }
+        Log.d(TAG, "setCharacteristicUuids: read/write=$readWriteUuid, notify=$notifyUuid, includeNotify=$includeNotify")
+        this.readWriteCharacteristicUuid = readWriteUuid
+        this.notifyCharacteristicUuid = notifyUuid
+        this.includeNotifyCharacteristic = includeNotify
         return true
     }
 

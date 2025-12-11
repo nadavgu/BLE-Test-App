@@ -98,6 +98,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         // Initialize state with current values or defaults
         gattServerState = gattServerState.copy(
             serviceUuid = gattServerController.getServiceUuid().toString(),
+            readWriteUuid = gattServerController.getReadWriteCharacteristicUuid().toString(),
+            notifyUuid = gattServerController.getNotifyCharacteristicUuid().toString(),
+            includeNotifyCharacteristic = gattServerController.isNotifyCharacteristicIncluded(),
             manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "0x004C",
             manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03"
         )
@@ -179,6 +182,24 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                                 gattServerState = gattServerState.copy(
                                     serviceUuid = uuid,
                                     uuidError = null
+                                )
+                            },
+                            onReadWriteUuidChange = { uuid ->
+                                gattServerState = gattServerState.copy(
+                                    readWriteUuid = uuid,
+                                    readWriteUuidError = null
+                                )
+                            },
+                            onNotifyUuidChange = { uuid ->
+                                gattServerState = gattServerState.copy(
+                                    notifyUuid = uuid,
+                                    notifyUuidError = null
+                                )
+                            },
+                            onIncludeNotifyChange = { include ->
+                                gattServerState = gattServerState.copy(
+                                    includeNotifyCharacteristic = include,
+                                    notifyUuidError = null
                                 )
                             },
                             onManufacturerIdChange = { id ->
@@ -553,6 +574,61 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                     return
                 }
                 
+                // Validate characteristic UUIDs
+                val readWriteUuidString = gattServerState.readWriteUuid.trim()
+                if (readWriteUuidString.isEmpty()) {
+                    gattServerState = gattServerState.copy(
+                        readWriteUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
+                    )
+                    return
+                }
+                val notifyUuidString = gattServerState.notifyUuid.trim()
+                
+                val readWriteUuid: UUID = try {
+                    UUID.fromString(readWriteUuidString)
+                } catch (e: IllegalArgumentException) {
+                    Log.w(TAG, "onStartGattServerClicked: Invalid read/write UUID: $readWriteUuidString", e)
+                    gattServerState = gattServerState.copy(
+                        readWriteUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
+                    )
+                    return
+                }
+                
+                val includeNotify = gattServerState.includeNotifyCharacteristic
+                val notifyUuid: UUID = if (includeNotify) {
+                    if (notifyUuidString.isEmpty()) {
+                        gattServerState = gattServerState.copy(
+                            notifyUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
+                        )
+                        return
+                    }
+                    try {
+                        UUID.fromString(notifyUuidString)
+                    } catch (e: IllegalArgumentException) {
+                        Log.w(TAG, "onStartGattServerClicked: Invalid notify UUID: $notifyUuidString", e)
+                        gattServerState = gattServerState.copy(
+                            notifyUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
+                        )
+                        return
+                    }
+                } else {
+                    // Keep last valid notify UUID so it is available if re-enabled
+                    try {
+                        UUID.fromString(notifyUuidString)
+                    } catch (_: IllegalArgumentException) {
+                        // fallback to default if currently invalid
+                        UUID.fromString("00002A1A-0000-1000-8000-00805F9B34FB")
+                    }
+                }
+                
+                if (!gattServerController.setCharacteristicUuids(readWriteUuid, notifyUuid, includeNotify)) {
+                    return
+                }
+                gattServerState = gattServerState.copy(
+                    readWriteUuidError = null,
+                    notifyUuidError = null
+                )
+                
                 // Parse and set manufacturer data if provided
                 val manufacturerIdString = gattServerState.manufacturerId.trim()
                 val manufacturerDataString = gattServerState.manufacturerData.trim()
@@ -697,6 +773,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             connectedClientCount = clientCount,
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
+            readWriteUuidError = if (!running) null else gattServerState.readWriteUuidError,
+            notifyUuidError = if (!running) null else gattServerState.notifyUuidError,
             manufacturerIdError = if (!running) null else gattServerState.manufacturerIdError,
             manufacturerDataError = if (!running) null else gattServerState.manufacturerDataError
         )
