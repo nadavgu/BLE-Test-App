@@ -1,5 +1,9 @@
 package com.nadavgu.bletestapp
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,10 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -160,6 +169,7 @@ private fun ConnectedDeviceItem(
     onRemove: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val expandedServices = remember { mutableStateOf(setOf<String>()) }
     val statusText = when {
         device.isConnecting -> context.getString(R.string.connected_device_status_connecting)
         device.isDisconnected -> context.getString(R.string.connected_device_status_disconnected)
@@ -206,6 +216,150 @@ private fun ConnectedDeviceItem(
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
+            
+            // Services section
+            if (device.services.isNotEmpty() && !device.isConnecting && !device.isDisconnected) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = context.getString(R.string.connected_device_services_title, device.services.size),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                device.services.forEach { service ->
+                    val serviceKey = "${device.address}_${service.uuid}"
+                    val isExpanded = expandedServices.value.contains(serviceKey)
+                    
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { 
+                                        val currentSet = expandedServices.value.toMutableSet()
+                                        if (isExpanded) {
+                                            currentSet.remove(serviceKey)
+                                        } else {
+                                            currentSet.add(serviceKey)
+                                        }
+                                        expandedServices.value = currentSet
+                                    },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = context.getString(R.string.connected_device_service_uuid),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = service.uuid.toString().uppercase(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Text(
+                                        text = context.getString(
+                                            R.string.connected_device_characteristics_count,
+                                            service.characteristics.size
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (isExpanded) {
+                                        context.getString(R.string.connected_device_collapse)
+                                    } else {
+                                        context.getString(R.string.connected_device_expand)
+                                    }
+                                )
+                            }
+                            
+                            AnimatedVisibility(
+                                visible = isExpanded,
+                                enter = expandVertically(),
+                                exit = shrinkVertically()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp)
+                                ) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                    Text(
+                                        text = context.getString(R.string.connected_device_characteristics_title),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                    
+                                    service.characteristics.forEach { characteristic ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 4.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surface
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = context.getString(R.string.connected_device_characteristic_uuid),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = characteristic.uuid.toString().uppercase(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                                Text(
+                                                    text = context.getString(
+                                                        R.string.connected_device_characteristic_properties,
+                                                        formatCharacteristicProperties(characteristic.properties)
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(top = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (!device.isConnecting && !device.isDisconnected && device.services.isEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = context.getString(R.string.connected_device_no_services),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -225,6 +379,29 @@ private fun ConnectedDeviceItem(
             }
         }
     }
+}
+
+private fun formatCharacteristicProperties(properties: Int): String {
+    val props = mutableListOf<String>()
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_READ != 0) {
+        props.add("READ")
+    }
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
+        props.add("WRITE")
+    }
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) {
+        props.add("WRITE_NO_RESPONSE")
+    }
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
+        props.add("NOTIFY")
+    }
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) {
+        props.add("INDICATE")
+    }
+    if (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_SIGNED_WRITE != 0) {
+        props.add("SIGNED_WRITE")
+    }
+    return props.joinToString(", ").ifEmpty { "NONE" }
 }
 
 @Composable

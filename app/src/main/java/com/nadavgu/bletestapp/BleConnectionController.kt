@@ -3,10 +3,14 @@ package com.nadavgu.bletestapp
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattService
 import android.content.Context
 import android.util.Log
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.observer.ConnectionObserver
+import java.util.UUID
 
 class BleConnectionController(
     private val context: Context,
@@ -27,17 +31,26 @@ class BleConnectionController(
     }
 
     private inner class MyBleManager(context: Context) : BleManager(context) {
+        @SuppressLint("MissingPermission")
+        private var cachedServices: List<BluetoothGattService> = emptyList()
+        
         override fun getMinLogPriority(): Int = Log.DEBUG
 
         override fun log(priority: Int, message: String) {
             Log.println(priority, TAG, message)
         }
 
+        @SuppressLint("MissingPermission")
         override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
             // Don't require any specific services - just maintain the connection
             // This prevents disconnection with REASON_NOT_SUPPORTED when no services are required
+            // Cache services when they're discovered
+            cachedServices = gatt.services ?: emptyList()
+            Log.d(TAG, "isRequiredServiceSupported: Cached ${cachedServices.size} services")
             return true
         }
+
+        fun getDiscoveredServices() = cachedServices
     }
 
     @SuppressLint("MissingPermission")
@@ -109,14 +122,60 @@ class BleConnectionController(
                         connectedDevices[device.address]?.name ?: "Unknown"
                     }
                     Log.i(TAG, "onDeviceReady: ${device.address} ($name) - connection fully established")
+                    
+                    // Services are automatically discovered when device is ready
+                    // Extract them directly from the manager
+                    val services = extractServices(device.address)
                     connectedDevices[device.address] = ConnectedDevice(
                         address = device.address,
                         name = name,
                         isConnecting = false,
                         isDisconnected = false,
-                        disconnectionReason = null
+                        disconnectionReason = null,
+                        services = services
                     )
+                    Log.d(TAG, "onDeviceReady: Found ${services.size} services for ${device.address}")
                     listener.onDeviceConnected(device.address, name)
+                }
+                
+                @SuppressLint("MissingPermission")
+                private fun extractServices(address: String): List<GattService> {
+                    val services = mutableListOf<GattService>()
+                    val manager = connections[address] as? MyBleManager ?: return emptyList()
+                    
+                    try {
+                        // Access services through the manager's public method
+                        val gattServices = manager.getDiscoveredServices()
+                        
+                        gattServices.forEach { service: BluetoothGattService ->
+                            val characteristics = mutableListOf<GattCharacteristic>()
+                            val serviceCharacteristics = service.characteristics ?: emptyList()
+                            
+                            serviceCharacteristics.forEach { characteristic: BluetoothGattCharacteristic ->
+                                characteristics.add(
+                                    GattCharacteristic(
+                                        uuid = characteristic.uuid,
+                                        properties = characteristic.properties,
+                                        permissions = characteristic.permissions
+                                    )
+                                )
+                            }
+                            
+                            services.add(
+                                GattService(
+                                    uuid = service.uuid,
+                                    type = service.type,
+                                    characteristics = characteristics
+                                )
+                            )
+                        }
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "extractServices: SecurityException", e)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "extractServices: Exception", e)
+                    }
+                    
+                    return services
                 }
 
                 override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {
@@ -126,13 +185,14 @@ class BleConnectionController(
                     listener.onConnectionFailed(device.address, reason)
                 }
             })
+            
+            // Store manager reference for service extraction
+            connections[address] = manager
 
             manager.connect(device)
                 .retry(3, 100)
                 .useAutoConnect(false)
                 .enqueue()
-
-            connections[address] = manager
             Log.d(TAG, "connectToDevice: Connection request enqueued for $address")
             true
         } catch (e: SecurityException) {

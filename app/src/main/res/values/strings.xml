@@ -57,6 +57,15 @@
     <string name="connected_device_disconnected_link_loss">Disconnected: Connection lost</string>
     <string name="connected_device_disconnected_cancelled">Disconnected: Connection cancelled</string>
     <string name="connected_device_disconnected_reason">Disconnected: Reason code %1$d</string>
+    <string name="connected_device_services_title">Services (%1$d)</string>
+    <string name="connected_device_service_uuid">Service UUID</string>
+    <string name="connected_device_characteristics_count">%1$d characteristics</string>
+    <string name="connected_device_characteristics_title">Characteristics</string>
+    <string name="connected_device_characteristic_uuid">Characteristic UUID</string>
+    <string name="connected_device_characteristic_properties">Properties: %1$s</string>
+    <string name="connected_device_no_services">No services discovered</string>
+    <string name="connected_device_expand">Expand</string>
+    <string name="connected_device_collapse">Collapse</string>
     <string name="connection_error">Connection failed</string>
     <string name="gatt_server_title">BLE GATT Server</string>
     <string name="gatt_server_status_stopped">Server stopped</string>
