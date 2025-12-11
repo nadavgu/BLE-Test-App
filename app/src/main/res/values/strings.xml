@@ -83,9 +83,7 @@
     <string name="gatt_server_advanced_params_expand">Expand</string>
     <string name="gatt_server_advanced_params_collapse">Collapse</string>
     <string name="gatt_server_characteristics_title">Characteristics</string>
-    <string name="gatt_server_read_write_uuid_hint">Read/Write characteristic UUID (e.g., 00002A19-0000-1000-8000-00805F9B34FB)</string>
-    <string name="gatt_server_notify_uuid_hint">Notify characteristic UUID (e.g., 00002A1A-0000-1000-8000-00805F9B34FB)</string>
-    <string name="gatt_server_notify_toggle_label">Include notify characteristic</string>
+    <string name="gatt_server_characteristic_uuid_hint">Characteristic UUID (supports read, write, and notify) (e.g., 00002A19-0000-1000-8000-00805F9B34FB)</string>
     <string name="gatt_server_characteristic_uuid_invalid">Invalid characteristic UUID format</string>
     <string name="gatt_server_manufacturer_data_title">Manufacturer Data (Optional)</string>
     <string name="gatt_server_manufacturer_id_hint">Manufacturer ID (hex, e.g., 0x004C)</string>
