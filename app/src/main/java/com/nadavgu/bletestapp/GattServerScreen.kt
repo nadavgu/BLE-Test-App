@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nadavgu.bletestapp.ConnectedClient
 
 data class CharacteristicEntry(
     val entryId: String,
@@ -34,6 +35,7 @@ data class GattServerState(
     val isRunning: Boolean = false,
     val serverAddress: String? = null,
     val connectedClientCount: Int = 0,
+    val connectedClients: List<ConnectedClient> = emptyList(),
     val serviceUuid: String = "",
     val characteristics: List<CharacteristicEntry> = emptyList(),
     val manufacturerId: String = "",
@@ -122,8 +124,39 @@ fun GattServerScreen(
                     text = context.getString(R.string.gatt_server_connected_clients, state.connectedClientCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                 )
+                
+                // Show connected clients list
+                if (state.connectedClients.isNotEmpty()) {
+                    state.connectedClients.forEach { client ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = client.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = client.address,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else if (state.isRunning) {
+                    Text(
+                        text = "No clients connected",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
             }
         }
         

@@ -792,11 +792,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         val running = gattServerController.isRunning
         val address = gattServerController.getServerAddress()
         val clientCount = gattServerController.connectedClientCount
+        val connectedClients = gattServerController.getConnectedClients()
         
         gattServerState = gattServerState.copy(
             isRunning = running,
             serverAddress = address,
             connectedClientCount = clientCount,
+            connectedClients = connectedClients,
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
             characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },

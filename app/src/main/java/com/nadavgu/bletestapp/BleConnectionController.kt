@@ -70,7 +70,7 @@ class BleConnectionController(
             if (writeType != BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
                 characteristic.writeType = writeType
             }
-            
+
             // Use the protected method from parent class
             writeCharacteristic(characteristic, data, writeType).enqueue()
             return true

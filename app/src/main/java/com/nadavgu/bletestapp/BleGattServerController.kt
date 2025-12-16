@@ -3,6 +3,7 @@ package com.nadavgu.bletestapp
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
@@ -13,9 +14,16 @@ import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.BleServerManager
+import no.nordicsemi.android.ble.observer.ConnectionObserver
 import no.nordicsemi.android.ble.observer.ServerObserver
 import java.util.UUID
+
+data class ConnectedClient(
+    val address: String,
+    val name: String
+)
 
 class BleGattServerController(
     private val context: Context,
@@ -48,7 +56,8 @@ class BleGattServerController(
 
     private var serverManager: MyBleServerManager? = null
     private var isServerRunning = false
-    private val connectedClients = mutableSetOf<String>()
+    private val connectedClients = mutableMapOf<String, ConnectedClient>()
+    private val clientManagers = mutableMapOf<String, MyBleManager>()
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var isAdvertising = false
 
@@ -115,14 +124,33 @@ class BleGattServerController(
                 "Unknown"
             }
             Log.i(TAG, "onDeviceConnectedToServer: $address ($name)")
-            connectedClients.add(address)
+            
+            // Store client information
+            connectedClients[address] = ConnectedClient(address, name)
+            
+            // Attach a BleManager to this client connection
+            // The nordicsemi library's BleServerManager manages the server-side connection,
+            // but we create a BleManager to interact with the client
+            val manager = MyBleManager(context, device)
+            manager.attachClientConnection(device)
+            clientManagers[address] = manager
+            
+            // Note: The server manager already handles the connection, so we don't need to
+            // explicitly connect the manager. It's attached for potential future interactions.
+            Log.d(TAG, "onDeviceConnectedToServer: Attached BleManager to client $address")
+            
             listener.onClientConnected(address)
         }
 
         override fun onDeviceDisconnectedFromServer(device: BluetoothDevice) {
             val address = device.address
             Log.i(TAG, "onDeviceDisconnectedFromServer: $address")
+            
+            // Remove client and its manager
             connectedClients.remove(address)
+            clientManagers[address]?.close()
+            clientManagers.remove(address)
+            
             listener.onClientDisconnected(address)
         }
     }
@@ -132,6 +160,60 @@ class BleGattServerController(
 
     val connectedClientCount: Int
         get() = connectedClients.size
+    
+    fun getConnectedClients(): List<ConnectedClient> {
+        return connectedClients.values.toList()
+    }
+    
+    fun getClientManager(address: String): BleManager? {
+        return clientManagers[address]
+    }
+    
+    // Inner class for managing client connections
+    // This BleManager is attached to each client connection for potential interactions
+    private inner class MyBleManager(context: Context, private val device: BluetoothDevice) : BleManager(context) {
+        override fun getMinLogPriority(): Int = Log.DEBUG
+
+        override fun log(priority: Int, message: String) {
+            Log.println(priority, TAG, "[Client ${device.address}] $message")
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
+            // Accept any service - we're the server, so we don't need to validate services
+            Log.d(TAG, "MyBleManager.isRequiredServiceSupported: Client ${device.address} connected")
+            return true
+        }
+        
+        init {
+            // Set up connection observer for the manager
+            setConnectionObserver(object : ConnectionObserver {
+                override fun onDeviceConnecting(device: BluetoothDevice) {
+                    Log.d(TAG, "MyBleManager: Client ${device.address} connecting")
+                }
+                
+                override fun onDeviceConnected(device: BluetoothDevice) {
+                    Log.d(TAG, "MyBleManager: Client ${device.address} connection established")
+                }
+                
+                override fun onDeviceDisconnecting(device: BluetoothDevice) {
+                    Log.d(TAG, "MyBleManager: Client ${device.address} disconnecting")
+                }
+                
+                override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
+                    Log.d(TAG, "MyBleManager: Client ${device.address} disconnected, reason=$reason")
+                }
+                
+                override fun onDeviceReady(device: BluetoothDevice) {
+                    Log.d(TAG, "MyBleManager: Client ${device.address} ready")
+                }
+                
+                override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {
+                    Log.e(TAG, "MyBleManager: Client ${device.address} failed to connect, reason=$reason")
+                }
+            })
+        }
+    }
 
     fun setServiceUuid(uuid: UUID) {
         if (isServerRunning) {
@@ -267,9 +349,14 @@ class BleGattServerController(
             Log.d(TAG, "stopServer: Closing server manager")
             serverManager?.close()
             serverManager = null
-            isServerRunning = false
+            
+            // Close all client managers
+            clientManagers.values.forEach { it.close() }
+            clientManagers.clear()
+            
             val clientCount = connectedClients.size
             connectedClients.clear()
+            isServerRunning = false
             Log.i(TAG, "stopServer: Server stopped (disconnected $clientCount clients)")
             listener.onServerStopped()
             true
