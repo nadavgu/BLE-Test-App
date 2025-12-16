@@ -96,9 +96,22 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         connectionController = BleConnectionController(this, this)
         
         // Initialize state with current values or defaults
+        val defaultCharacteristicUuids = gattServerController.getCharacteristicUuids()
         gattServerState = gattServerState.copy(
             serviceUuid = gattServerController.getServiceUuid().toString(),
-            characteristicUuid = gattServerController.getCharacteristicUuid().toString(),
+            characteristics = if (defaultCharacteristicUuids.isNotEmpty()) {
+                defaultCharacteristicUuids.mapIndexed { index, uuid ->
+                    CharacteristicEntry(
+                        entryId = UUID.randomUUID().toString(),
+                        uuid = uuid.toString()
+                    )
+                }
+            } else {
+                listOf(CharacteristicEntry(
+                    entryId = UUID.randomUUID().toString(),
+                    uuid = UUID.randomUUID().toString()
+                ))
+            },
             manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "0x004C",
             manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03"
         )
@@ -182,10 +195,30 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                                             uuidError = null
                                         )
                                     },
-                                    onCharacteristicUuidChange = { uuid ->
+                                    onAddCharacteristic = {
+                                        val newEntryId = UUID.randomUUID().toString()
+                                        val randomUuid = UUID.randomUUID().toString()
                                         gattServerState = gattServerState.copy(
-                                            characteristicUuid = uuid,
-                                            characteristicUuidError = null
+                                            characteristics = gattServerState.characteristics + CharacteristicEntry(
+                                                entryId = newEntryId,
+                                                uuid = randomUuid
+                                            )
+                                        )
+                                    },
+                                    onRemoveCharacteristic = { entryId ->
+                                        gattServerState = gattServerState.copy(
+                                            characteristics = gattServerState.characteristics.filter { it.entryId != entryId }
+                                        )
+                                    },
+                                    onCharacteristicUuidChange = { entryId, uuid ->
+                                        gattServerState = gattServerState.copy(
+                                            characteristics = gattServerState.characteristics.map { char ->
+                                                if (char.entryId == entryId) {
+                                                    char.copy(uuid = uuid, uuidError = null)
+                                                } else {
+                                                    char
+                                                }
+                                            }
                                         )
                                     },
                                     onManufacturerIdChange = { id ->
@@ -560,33 +593,53 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                     return
                 }
                 
-                // Validate and set characteristic UUID
-                val characteristicUuidString = gattServerState.characteristicUuid.trim()
-                if (characteristicUuidString.isEmpty()) {
-                    Log.w(TAG, "onStartGattServerClicked: Characteristic UUID is empty")
-                    gattServerState = gattServerState.copy(
-                        characteristicUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
-                    )
+                // Validate and set characteristic UUIDs
+                if (gattServerState.characteristics.isEmpty()) {
+                    Log.w(TAG, "onStartGattServerClicked: No characteristics defined")
+                    val rootView = window.decorView.rootView
+                    Snackbar.make(
+                        rootView,
+                        "At least one characteristic is required",
+                        Snackbar.LENGTH_LONG
+                    ).show()
                     return
                 }
                 
-                val characteristicUuid: UUID = try {
-                    UUID.fromString(characteristicUuidString)
-                } catch (e: IllegalArgumentException) {
-                    Log.w(TAG, "onStartGattServerClicked: Invalid characteristic UUID: $characteristicUuidString", e)
-                    gattServerState = gattServerState.copy(
-                        characteristicUuidError = getString(R.string.gatt_server_characteristic_uuid_invalid)
-                    )
+                val characteristicUuids = mutableListOf<UUID>()
+                val updatedCharacteristics = gattServerState.characteristics.mapIndexed { index, char ->
+                    val uuidString = char.uuid.trim()
+                    if (uuidString.isEmpty()) {
+                        Log.w(TAG, "onStartGattServerClicked: Characteristic ${index + 1} UUID is empty")
+                        char.copy(uuidError = getString(R.string.gatt_server_characteristic_uuid_invalid))
+                    } else {
+                        try {
+                            val uuid = UUID.fromString(uuidString)
+                            characteristicUuids.add(uuid)
+                            char.copy(uuidError = null)
+                        } catch (e: IllegalArgumentException) {
+                            Log.w(TAG, "onStartGattServerClicked: Invalid characteristic UUID: $uuidString", e)
+                            char.copy(uuidError = getString(R.string.gatt_server_characteristic_uuid_invalid))
+                        }
+                    }
+                }
+                
+                // Check if any characteristics have errors
+                val hasErrors = updatedCharacteristics.any { it.uuidError != null }
+                if (hasErrors) {
+                    gattServerState = gattServerState.copy(characteristics = updatedCharacteristics)
                     return
                 }
                 
-                if (!gattServerController.setCharacteristicUuid(characteristicUuid)) {
+                if (characteristicUuids.isEmpty()) {
+                    Log.w(TAG, "onStartGattServerClicked: No valid characteristics")
+                    return
+                }
+                
+                if (!gattServerController.setCharacteristicUuids(characteristicUuids)) {
                     // Error already reported via callback
                     return
                 }
-                gattServerState = gattServerState.copy(
-                    characteristicUuidError = null
-                )
+                gattServerState = gattServerState.copy(characteristics = updatedCharacteristics)
                 
                 // Parse and set manufacturer data if provided
                 val manufacturerIdString = gattServerState.manufacturerId.trim()
@@ -732,7 +785,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
             connectedClientCount = clientCount,
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
-            characteristicUuidError = if (!running) null else gattServerState.characteristicUuidError,
+            characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },
             manufacturerIdError = if (!running) null else gattServerState.manufacturerIdError,
             manufacturerDataError = if (!running) null else gattServerState.manufacturerDataError
         )

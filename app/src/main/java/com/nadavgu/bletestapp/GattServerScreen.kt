@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import java.util.UUID
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -20,17 +24,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+data class CharacteristicEntry(
+    val entryId: String,
+    val uuid: String,
+    val uuidError: String? = null
+)
+
 data class GattServerState(
     val isRunning: Boolean = false,
     val serverAddress: String? = null,
     val connectedClientCount: Int = 0,
     val serviceUuid: String = "",
-    val characteristicUuid: String = "",
+    val characteristics: List<CharacteristicEntry> = emptyList(),
     val manufacturerId: String = "",
     val manufacturerData: String = "",
     val dataReceived: String = "",
     val uuidError: String? = null,
-    val characteristicUuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null
 )
@@ -39,7 +48,9 @@ data class GattServerState(
 fun GattServerScreen(
     state: GattServerState,
     onUuidChange: (String) -> Unit,
-    onCharacteristicUuidChange: (String) -> Unit,
+    onAddCharacteristic: () -> Unit,
+    onRemoveCharacteristic: (String) -> Unit,
+    onCharacteristicUuidChange: (String, String) -> Unit,
     onManufacturerIdChange: (String) -> Unit,
     onManufacturerDataChange: (String) -> Unit,
     onToggleServer: () -> Unit,
@@ -188,30 +199,68 @@ fun GattServerScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
                         // Characteristics section
-                        Text(
-                            text = context.getString(R.string.gatt_server_characteristics_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = state.characteristicUuid,
-                            onValueChange = onCharacteristicUuidChange,
-                            label = { Text(context.getString(R.string.gatt_server_characteristic_uuid_hint)) },
-                            placeholder = { Text("00002A19-0000-1000-8000-00805F9B34FB") },
-                            enabled = !state.isRunning,
-                            isError = state.characteristicUuidError != null,
-                            supportingText = state.characteristicUuidError?.let { { Text(it) } },
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp
-                            ),
-                            singleLine = true
-                        )
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = context.getString(R.string.gatt_server_characteristics_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            
+                            IconButton(
+                                onClick = onAddCharacteristic,
+                                enabled = !state.isRunning,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Add characteristic"
+                                )
+                            }
+                        }
+
+                        // List of characteristics
+                        val hintText = context.getString(R.string.gatt_server_characteristic_uuid_hint)
+                        state.characteristics.forEachIndexed { index, characteristic ->
+                            OutlinedTextField(
+                                value = characteristic.uuid,
+                                onValueChange = { newUuid: String ->
+                                    onCharacteristicUuidChange(characteristic.entryId, newUuid)
+                                },
+                                label = { Text(hintText) },
+                                placeholder = { Text("00002A19-0000-1000-8000-00805F9B34FB") },
+                                enabled = !state.isRunning,
+                                isError = characteristic.uuidError != null,
+                                supportingText = characteristic.uuidError?.let { { Text(it) } },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { onRemoveCharacteristic(characteristic.entryId) },
+                                        enabled = !state.isRunning,
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Remove characteristic",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = if (index < state.characteristics.size - 1) 8.dp else 16.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp
+                                ),
+                                singleLine = true
+                            )
+                        }
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         

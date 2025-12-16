@@ -43,8 +43,8 @@ class BleGattServerController(
     private var manufacturerId: Int? = null
     private var manufacturerData: ByteArray? = null
     
-    // Characteristic UUID (configurable)
-    private var characteristicUuid: UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
+    // Characteristic UUIDs (configurable, multiple)
+    private var characteristicUuids: List<UUID> = listOf(UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB"))
 
     private var serverManager: MyBleServerManager? = null
     private var isServerRunning = false
@@ -73,24 +73,27 @@ class BleGattServerController(
             // Create GATT service
             val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
-            // Create a single characteristic with read, write, and notify properties
-            val characteristic = BluetoothGattCharacteristic(
-                characteristicUuid,
-                BluetoothGattCharacteristic.PROPERTY_READ or 
-                BluetoothGattCharacteristic.PROPERTY_WRITE or 
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PERMISSION_READ or 
-                BluetoothGattCharacteristic.PERMISSION_WRITE
-            )
+            // Create characteristics with read, write, and notify properties
+            characteristicUuids.forEach { uuid ->
+                val characteristic = BluetoothGattCharacteristic(
+                    uuid,
+                    BluetoothGattCharacteristic.PROPERTY_READ or 
+                    BluetoothGattCharacteristic.PROPERTY_WRITE or 
+                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                    BluetoothGattCharacteristic.PERMISSION_READ or 
+                    BluetoothGattCharacteristic.PERMISSION_WRITE
+                )
 
-            // Add descriptor for notifications
-            val descriptor = BluetoothGattDescriptor(
-                UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"), // CLIENT_CHARACTERISTIC_CONFIG_UUID
-                BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-            )
-            characteristic.addDescriptor(descriptor)
+                // Add descriptor for notifications
+                val descriptor = BluetoothGattDescriptor(
+                    UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"), // CLIENT_CHARACTERISTIC_CONFIG_UUID
+                    BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+                )
+                characteristic.addDescriptor(descriptor)
 
-            service.addCharacteristic(characteristic)
+                service.addCharacteristic(characteristic)
+                Log.d(TAG, "initializeServer: Added characteristic with UUID=$uuid")
+            }
 
             Log.d(TAG, "initializeServer: Service initialized with ${service.characteristics.size} characteristics")
             return listOf(service)
@@ -141,7 +144,7 @@ class BleGattServerController(
 
     fun getServiceUuid(): UUID = serviceUuid
 
-    fun getCharacteristicUuid(): UUID = characteristicUuid
+    fun getCharacteristicUuids(): List<UUID> = characteristicUuids
 
     fun getManufacturerId(): Int? = manufacturerId
     
@@ -159,13 +162,13 @@ class BleGattServerController(
         return true
     }
 
-    fun setCharacteristicUuid(uuid: UUID): Boolean {
+    fun setCharacteristicUuids(uuids: List<UUID>): Boolean {
         if (isServerRunning) {
-            Log.w(TAG, "setCharacteristicUuid: Cannot change characteristic while server is running")
+            Log.w(TAG, "setCharacteristicUuids: Cannot change characteristics while server is running")
             return false
         }
-        Log.d(TAG, "setCharacteristicUuid: Setting characteristic UUID to $uuid")
-        this.characteristicUuid = uuid
+        Log.d(TAG, "setCharacteristicUuids: Setting ${uuids.size} characteristic UUIDs")
+        this.characteristicUuids = uuids
         return true
     }
 
