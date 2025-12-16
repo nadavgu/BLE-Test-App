@@ -51,6 +51,30 @@ class BleConnectionController(
         }
 
         fun getDiscoveredServices() = cachedServices
+        
+        fun writeCharacteristic(
+            serviceUuid: UUID,
+            characteristicUuid: UUID,
+            data: ByteArray,
+            writeType: Int
+        ): Boolean {
+            val service = cachedServices.find { it.uuid == serviceUuid }
+            val characteristic = service?.characteristics?.find { it.uuid == characteristicUuid }
+            
+            if (characteristic == null) {
+                Log.w(TAG, "writeCharacteristic: Characteristic not found")
+                return false
+            }
+            
+            // Set write type if needed
+            if (writeType != BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
+                characteristic.writeType = writeType
+            }
+            
+            // Use the protected method from parent class
+            writeCharacteristic(characteristic, data, writeType).enqueue()
+            return true
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -237,6 +261,42 @@ class BleConnectionController(
         Log.i(TAG, "disconnectAll: Disconnecting $count devices")
         connections.keys.toList().forEach { address ->
             disconnectDevice(address)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun writeCharacteristic(
+        deviceAddress: String,
+        serviceUuid: UUID,
+        characteristicUuid: UUID,
+        data: ByteArray,
+        writeType: Int = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+    ): Boolean {
+        val manager = connections[deviceAddress] as? MyBleManager ?: run {
+            Log.w(TAG, "writeCharacteristic: No connection found for $deviceAddress")
+            return false
+        }
+
+        if (!bleRequirements.hasAllPermissions()) {
+            Log.w(TAG, "writeCharacteristic: Missing permissions")
+            return false
+        }
+
+        return try {
+            Log.d(TAG, "writeCharacteristic: Writing to $deviceAddress, service=$serviceUuid, characteristic=$characteristicUuid, data size=${data.size}")
+            
+            val success = manager.writeCharacteristic(serviceUuid, characteristicUuid, data, writeType)
+            
+            if (success) {
+                Log.d(TAG, "writeCharacteristic: Write request enqueued")
+            }
+            success
+        } catch (e: SecurityException) {
+            Log.e(TAG, "writeCharacteristic: SecurityException", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "writeCharacteristic: Exception", e)
+            false
         }
     }
 }

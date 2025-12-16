@@ -63,6 +63,11 @@
     <string name="connected_device_characteristics_title">Characteristics</string>
     <string name="connected_device_characteristic_uuid">Characteristic UUID</string>
     <string name="connected_device_characteristic_properties">Properties: %1$s</string>
+    <string name="connected_device_write_title">Write Data</string>
+    <string name="connected_device_write_hint">Hex bytes (e.g., 01 02 03)</string>
+    <string name="connected_device_write_button">Write</string>
+    <string name="connected_device_write_invalid_hex">Invalid hex format</string>
+    <string name="connected_device_write_empty">Data cannot be empty</string>
     <string name="connected_device_no_services">No services discovered</string>
     <string name="connected_device_expand">Expand</string>
     <string name="connected_device_collapse">Collapse</string>

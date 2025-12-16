@@ -48,6 +48,7 @@ fun ConnectedDevicesScreen(
     onConnectByAddress: (String) -> Unit,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onWriteCharacteristic: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -154,7 +155,8 @@ fun ConnectedDevicesScreen(
                     ConnectedDeviceItem(
                         device = device,
                         onDisconnect = onDisconnect,
-                        onRemove = onRemove
+                        onRemove = onRemove,
+                        onWriteCharacteristic = onWriteCharacteristic
                     )
                 }
             }
@@ -166,7 +168,8 @@ fun ConnectedDevicesScreen(
 private fun ConnectedDeviceItem(
     device: ConnectedDevice,
     onDisconnect: (String) -> Unit,
-    onRemove: (String) -> Unit
+    onRemove: (String) -> Unit,
+    onWriteCharacteristic: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit
 ) {
     val context = LocalContext.current
     val expandedServices = remember { mutableStateOf(setOf<String>()) }
@@ -310,6 +313,9 @@ private fun ConnectedDeviceItem(
                                     )
                                     
                                     service.characteristics.forEach { characteristic ->
+                                        val hasWrite = (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE != 0) ||
+                                                (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+                                        
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -342,6 +348,18 @@ private fun ConnectedDeviceItem(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.padding(top = 2.dp)
                                                 )
+                                                
+                                                // Write section for writable characteristics
+                                                if (hasWrite) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                                    CharacteristicWriteSection(
+                                                        deviceAddress = device.address,
+                                                        serviceUuid = service.uuid,
+                                                        characteristicUuid = characteristic.uuid,
+                                                        onWrite = onWriteCharacteristic
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -377,6 +395,84 @@ private fun ConnectedDeviceItem(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CharacteristicWriteSection(
+    deviceAddress: String,
+    serviceUuid: java.util.UUID,
+    characteristicUuid: java.util.UUID,
+    onWrite: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit
+) {
+    val context = LocalContext.current
+    val writeData = remember { mutableStateOf("") }
+    val writeError = remember { mutableStateOf<String?>(null) }
+    
+    fun parseHexString(hex: String): ByteArray? {
+        val cleaned = hex.replace(" ", "").replace(":", "").replace("-", "")
+        if (cleaned.isEmpty()) return null
+        if (cleaned.length % 2 != 0) return null
+        
+        return try {
+            cleaned.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        } catch (e: NumberFormatException) {
+            null
+        }
+    }
+    
+    fun handleWrite() {
+        writeError.value = null
+        val data = parseHexString(writeData.value.trim())
+        if (data == null) {
+            writeError.value = context.getString(R.string.connected_device_write_invalid_hex)
+            return
+        }
+        if (data.isEmpty()) {
+            writeError.value = context.getString(R.string.connected_device_write_empty)
+            return
+        }
+        onWrite(deviceAddress, serviceUuid, characteristicUuid, data)
+        writeData.value = ""
+    }
+    
+    Column {
+        Text(
+            text = context.getString(R.string.connected_device_write_title),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        OutlinedTextField(
+            value = writeData.value,
+            onValueChange = { writeData.value = it },
+            label = { Text(context.getString(R.string.connected_device_write_hint)) },
+            placeholder = { Text("01 02 03") },
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp
+            ),
+            singleLine = true,
+            isError = writeError.value != null,
+            supportingText = {
+                writeError.value?.let { err ->
+                    Text(
+                        text = err,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Button(
+            onClick = { handleWrite() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = context.getString(R.string.connected_device_write_button))
         }
     }
 }

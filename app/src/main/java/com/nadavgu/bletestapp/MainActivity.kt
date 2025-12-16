@@ -183,6 +183,20 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
                             onRemove = { address ->
                                 connectionController.removeDisconnectedDevice(address)
                                 updateConnectedDevicesUi()
+                            },
+                            onWriteCharacteristic = { deviceAddress, serviceUuid, characteristicUuid, data ->
+                                Log.d(TAG, "onWriteCharacteristic: Writing to $deviceAddress, service=$serviceUuid, characteristic=$characteristicUuid, data size=${data.size}")
+                                if (connectionController.writeCharacteristic(deviceAddress, serviceUuid, characteristicUuid, data)) {
+                                    Log.d(TAG, "onWriteCharacteristic: Write request sent successfully")
+                                } else {
+                                    Log.w(TAG, "onWriteCharacteristic: Failed to send write request")
+                                    val rootView = window.decorView.rootView
+                                    Snackbar.make(
+                                        rootView,
+                                        "Failed to write to characteristic",
+                                        Snackbar.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         )
                     },
