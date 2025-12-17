@@ -20,6 +20,7 @@ import com.google.android.material.snackbar.Snackbar
 import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
 import android.util.Log
+import com.nadavgu.bletestapp.server.BleGattServerController
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener {
 

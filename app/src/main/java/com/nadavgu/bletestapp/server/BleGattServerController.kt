@@ -1,12 +1,9 @@
-package com.nadavgu.bletestapp
+package com.nadavgu.bletestapp.server
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
-import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -14,8 +11,8 @@ import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import com.nadavgu.bletestapp.BleRequirements
 import no.nordicsemi.android.ble.BleManager
-import no.nordicsemi.android.ble.BleServerManager
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import no.nordicsemi.android.ble.observer.ServerObserver
 import java.util.UUID
@@ -69,43 +66,6 @@ class BleGattServerController(
         override fun onStartFailure(errorCode: Int) {
             Log.e(TAG, "onStartFailure: Advertising failed with errorCode=$errorCode")
             listener.onServerError(errorCode)
-        }
-    }
-
-    private inner class MyBleServerManager(context: Context) : BleServerManager(context) {
-        init {
-            setServerObserver(connectionObserver)
-        }
-
-        override fun initializeServer(): List<BluetoothGattService> {
-            Log.d(TAG, "initializeServer: Creating GATT service with UUID=$serviceUuid")
-            // Create GATT service
-            val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-
-            // Create characteristics with read, write, and notify properties
-            characteristicUuids.forEach { uuid ->
-                val characteristic = BluetoothGattCharacteristic(
-                    uuid,
-                    BluetoothGattCharacteristic.PROPERTY_READ or 
-                    BluetoothGattCharacteristic.PROPERTY_WRITE or 
-                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                    BluetoothGattCharacteristic.PERMISSION_READ or 
-                    BluetoothGattCharacteristic.PERMISSION_WRITE
-                )
-
-                // Add descriptor for notifications
-                val descriptor = BluetoothGattDescriptor(
-                    UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"), // CLIENT_CHARACTERISTIC_CONFIG_UUID
-                    BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-                )
-                characteristic.addDescriptor(descriptor)
-
-                service.addCharacteristic(characteristic)
-                Log.d(TAG, "initializeServer: Added characteristic with UUID=$uuid")
-            }
-
-            Log.d(TAG, "initializeServer: Service initialized with ${service.characteristics.size} characteristics")
-            return listOf(service)
         }
     }
 
@@ -280,7 +240,8 @@ class BleGattServerController(
         return try {
             Log.i(TAG, "startServer: Creating server manager with service UUID=$serviceUuid")
             // Create server manager
-            serverManager = MyBleServerManager(context)
+            serverManager = MyBleServerManager.create(context, connectionObserver,
+                serviceUuid, characteristicUuids)
 
             // Start the server - initializeServer() will be called automatically
             serverManager!!.open()
