@@ -1,6 +1,7 @@
 package com.nadavgu.bletestapp
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.AdvertiseCallback
 import android.content.Intent
 import android.os.Bundle
@@ -21,8 +22,9 @@ import no.nordicsemi.android.support.v18.scanner.ScanResult
 import java.util.UUID
 import android.util.Log
 import com.nadavgu.bletestapp.server.BleGattServerController
+import com.nadavgu.bletestapp.server.BleServerListener
 
-class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGattServerController.Listener, BleConnectionController.Listener {
+class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServerListener, BleConnectionController.Listener {
 
     companion object {
         private const val TAG = "MainActivity"
@@ -762,15 +764,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleGatt
         }
     }
 
-    override fun onClientConnected(address: String) {
-        Log.i(TAG, "onClientConnected: Client connected to GATT server - $address")
+    override fun onClientConnected(device: BluetoothDevice) {
+        Log.i(TAG, "onClientConnected: Client connected to GATT server - ${device.address}")
         runOnUiThread {
             updateGattServerUi()
         }
     }
 
-    override fun onClientDisconnected(address: String) {
-        Log.i(TAG, "onClientDisconnected: Client disconnected from GATT server - $address")
+    override fun onClientDisconnected(device: BluetoothDevice) {
+        Log.i(TAG, "onClientDisconnected: Client disconnected from GATT server - ${device.address}")
         runOnUiThread {
             updateGattServerUi()
         }
