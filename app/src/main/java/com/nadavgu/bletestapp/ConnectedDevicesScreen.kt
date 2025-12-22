@@ -374,6 +374,78 @@ private fun ConnectedDeviceItem(
                 )
             }
             
+            // Speed check section
+            val hasSpeedCheckCharacteristic = deviceHasSpeedCheckCharacteristic(device)
+            val isButtonEnabled = hasSpeedCheckCharacteristic && !device.isConnecting && !device.isDisconnected && speedCheckState.value?.isRunning != true
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Speed check results display
+            speedCheckState.value?.let { state ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Speed Check Results",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        if (state.isRunning) {
+                            Text(
+                                text = "Running... Packets sent: ${state.packetsSent}/${state.totalPackets}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else if (state.error != null) {
+                            Text(
+                                text = "Error: ${state.error}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else if (state.throughputBytesPerSecond != null) {
+                            Text(
+                                text = "Throughput: ${String.format("%.2f", state.throughputBytesPerSecond / 1024.0)} KB/s",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Time: ${state.elapsedTimeMs}ms | Packets: ${state.packetsSent} | Total bytes: ${state.totalBytesSent}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Button(
+                onClick = {
+                    performSpeedCheck(
+                        deviceAddress = device.address,
+                        onWriteCharacteristic = onWriteCharacteristic,
+                        speedCheckState = speedCheckState,
+                        scope = scope,
+                        totalBytesMB = totalBytesMB,
+                        useWriteWithResponse = useWriteWithResponse
+                    )
+                },
+                enabled = isButtonEnabled,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = if (speedCheckState.value?.isRunning == true) "Speed Check Running..." else "Run Speed Check")
+            }
+            
             // Services section
             val visibleServices = device.services.filter { it.uuid != BleGattServerController.SPEED_CHECK_SERVICE_UUID }
             if (visibleServices.isNotEmpty() && !device.isConnecting && !device.isDisconnected) {
@@ -532,78 +604,6 @@ private fun ConnectedDeviceItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            
-            // Speed check button
-            val hasSpeedCheckCharacteristic = deviceHasSpeedCheckCharacteristic(device)
-            val isButtonEnabled = hasSpeedCheckCharacteristic && !device.isConnecting && !device.isDisconnected && speedCheckState.value?.isRunning != true
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            // Speed check results display
-            speedCheckState.value?.let { state ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Text(
-                            text = "Speed Check Results",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        if (state.isRunning) {
-                            Text(
-                                text = "Running... Packets sent: ${state.packetsSent}/${state.totalPackets}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else if (state.error != null) {
-                            Text(
-                                text = "Error: ${state.error}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        } else if (state.throughputBytesPerSecond != null) {
-                            Text(
-                                text = "Throughput: ${String.format("%.2f", state.throughputBytesPerSecond / 1024.0)} KB/s",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Time: ${state.elapsedTimeMs}ms | Packets: ${state.packetsSent} | Total bytes: ${state.totalBytesSent}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-            }
-            
-            Button(
-                onClick = {
-                    performSpeedCheck(
-                        deviceAddress = device.address,
-                        onWriteCharacteristic = onWriteCharacteristic,
-                        speedCheckState = speedCheckState,
-                        scope = scope,
-                        totalBytesMB = totalBytesMB,
-                        useWriteWithResponse = useWriteWithResponse
-                    )
-                },
-                enabled = isButtonEnabled,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = if (speedCheckState.value?.isRunning == true) "Speed Check Running..." else "Run Speed Check")
             }
             
             Row(
