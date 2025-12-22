@@ -17,6 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,7 +44,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nadavgu.bletestapp.server.BleGattServerController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import no.nordicsemi.android.ble.observer.ConnectionObserver
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +62,9 @@ fun ConnectedDevicesScreen(
     val context = LocalContext.current
     val addressInput = remember { mutableStateOf("") }
     val addressError = remember { mutableStateOf<String?>(null) }
+    val showSpeedCheckOptions = remember { mutableStateOf(false) }
+    val totalBytesMB = remember { mutableStateOf("1") }
+    val totalBytesMBError = remember { mutableStateOf<String?>(null) }
 
     fun validateAndConnect() {
         val text = addressInput.value.trim()
@@ -152,12 +162,113 @@ fun ConnectedDevicesScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Speed Check Advanced Options as first item
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        colors = CardDefaults.cardColors()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showSpeedCheckOptions.value = !showSpeedCheckOptions.value },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Speed Check Options",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Icon(
+                                    imageVector = if (showSpeedCheckOptions.value) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (showSpeedCheckOptions.value) "Collapse" else "Expand"
+                                )
+                            }
+                            
+                            AnimatedVisibility(
+                                visible = showSpeedCheckOptions.value,
+                                enter = expandVertically(),
+                                exit = shrinkVertically()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 16.dp)
+                                ) {
+                                    // Packet size info (read-only)
+                                    Text(
+                                        text = "Packet Size: 512 bytes (fixed)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                    
+                                    // Total bytes field
+                                    Text(
+                                        text = "Total Bytes (MB)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = totalBytesMB.value,
+                                        onValueChange = { value ->
+                                            totalBytesMB.value = value
+                                            totalBytesMBError.value = null
+                                            val doubleValue = value.toDoubleOrNull()
+                                            if (doubleValue == null || doubleValue <= 0) {
+                                                totalBytesMBError.value = "Must be greater than 0"
+                                            } else if (doubleValue > 100) {
+                                                totalBytesMBError.value = "Maximum 100 MB recommended"
+                                            }
+                                        },
+                                        label = { Text("Total bytes in megabytes") },
+                                        placeholder = { Text("1.0") },
+                                        isError = totalBytesMBError.value != null,
+                                        supportingText = totalBytesMBError.value?.let { { Text(it) } },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 14.sp
+                                        ),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors()
+                                    )
+                                    
+                                    // Show calculated packet count
+                                    totalBytesMB.value.toDoubleOrNull()?.let { mb ->
+                                        if (mb > 0) {
+                                            val totalBytes = (mb * 1024 * 1024).toLong()
+                                            val packetCount = (totalBytes / 512).toInt()
+                                            Text(
+                                                text = "Will send approximately $packetCount packets (${String.format("%.2f", totalBytes / 1024.0 / 1024.0)} MB)",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 items(devices, key = { it.address }) { device ->
                     ConnectedDeviceItem(
                         device = device,
                         onDisconnect = onDisconnect,
                         onRemove = onRemove,
-                        onWriteCharacteristic = onWriteCharacteristic
+                        onWriteCharacteristic = onWriteCharacteristic,
+                        totalBytesMB = totalBytesMB.value.toDoubleOrNull() ?: 1.0
                     )
                 }
             }
@@ -170,10 +281,13 @@ private fun ConnectedDeviceItem(
     device: ConnectedDevice,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onWriteCharacteristic: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Unit,
+    totalBytesMB: Double = 1.0
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val expandedServices = remember { mutableStateOf(setOf<String>()) }
+    val speedCheckState = remember { mutableStateOf<SpeedCheckState?>(null) }
     val statusText = when {
         device.isConnecting -> context.getString(R.string.connected_device_status_connecting)
         device.isDisconnected -> context.getString(R.string.connected_device_status_disconnected)
@@ -383,25 +497,73 @@ private fun ConnectedDeviceItem(
             
             // Speed check button
             val hasSpeedCheckCharacteristic = deviceHasSpeedCheckCharacteristic(device)
-            val isButtonEnabled = hasSpeedCheckCharacteristic && !device.isConnecting && !device.isDisconnected
+            val isButtonEnabled = hasSpeedCheckCharacteristic && !device.isConnecting && !device.isDisconnected && speedCheckState.value?.isRunning != true
             
             Spacer(modifier = Modifier.height(8.dp))
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Speed check results display
+            speedCheckState.value?.let { state ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Speed Check Results",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        if (state.isRunning) {
+                            Text(
+                                text = "Running... Packets sent: ${state.packetsSent}/${state.totalPackets}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else if (state.error != null) {
+                            Text(
+                                text = "Error: ${state.error}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else if (state.throughputBytesPerSecond != null) {
+                            Text(
+                                text = "Throughput: ${String.format("%.2f", state.throughputBytesPerSecond / 1024.0)} KB/s",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Time: ${state.elapsedTimeMs}ms | Packets: ${state.packetsSent} | Total bytes: ${state.totalBytesSent}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
             Button(
                 onClick = {
-                    // Write a simple test data to speed check characteristic
-                    val testData = byteArrayOf(0x01, 0x02, 0x03, 0x04)
-                    onWriteCharacteristic(
-                        device.address,
-                        BleGattServerController.SPEED_CHECK_SERVICE_UUID,
-                        BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
-                        testData
+                    performSpeedCheck(
+                        deviceAddress = device.address,
+                        onWriteCharacteristic = onWriteCharacteristic,
+                        speedCheckState = speedCheckState,
+                        scope = scope,
+                        totalBytesMB = totalBytesMB
                     )
                 },
                 enabled = isButtonEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = "Write to Speed Check Characteristic")
+                Text(text = if (speedCheckState.value?.isRunning == true) "Speed Check Running..." else "Run Speed Check")
             }
             
             Row(
@@ -526,11 +688,88 @@ private fun formatCharacteristicProperties(properties: Int): String {
     return props.joinToString(", ").ifEmpty { "NONE" }
 }
 
+private data class SpeedCheckState(
+    val isRunning: Boolean = false,
+    val packetsSent: Int = 0,
+    val totalPackets: Int = 0,
+    val totalBytesSent: Int = 0,
+    val elapsedTimeMs: Long = 0,
+    val throughputBytesPerSecond: Double? = null,
+    val error: String? = null
+)
+
 private fun deviceHasSpeedCheckCharacteristic(device: ConnectedDevice): Boolean {
     return device.services.any { service ->
         service.uuid == BleGattServerController.SPEED_CHECK_SERVICE_UUID &&
         service.characteristics.any { characteristic ->
             characteristic.uuid == BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID
+        }
+    }
+}
+
+private fun performSpeedCheck(
+    deviceAddress: String,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Unit,
+    speedCheckState: androidx.compose.runtime.MutableState<SpeedCheckState?>,
+    scope: CoroutineScope,
+    totalBytesMB: Double = 1.0
+) {
+    val packetSize = 512 // Fixed packet size
+    val totalBytes = (totalBytesMB * 1024 * 1024).toLong()
+    val totalPackets = (totalBytes / packetSize).toInt()
+    val packetData = ByteArray(packetSize) { it.toByte() }
+    
+    speedCheckState.value = SpeedCheckState(
+        isRunning = true,
+        totalPackets = totalPackets
+    )
+    
+    val startTime = System.currentTimeMillis()
+    var packetsSent = 0
+    
+    scope.launch {
+        try {
+            // Send packets sequentially with small delays to avoid overwhelming the stack
+            repeat(totalPackets) { index ->
+                onWriteCharacteristic(
+                    deviceAddress,
+                    BleGattServerController.SPEED_CHECK_SERVICE_UUID,
+                    BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
+                    packetData
+                )
+                packetsSent++
+                
+                // Update progress
+                speedCheckState.value = SpeedCheckState(
+                    isRunning = true,
+                    packetsSent = packetsSent,
+                    totalPackets = totalPackets,
+                    totalBytesSent = packetsSent * packetSize
+                )
+            }
+            
+            val endTime = System.currentTimeMillis()
+            val elapsedTimeMs = endTime - startTime
+            val totalBytesSent = packetsSent * packetSize
+            val throughputBytesPerSecond = if (elapsedTimeMs > 0) {
+                (totalBytesSent * 1000.0) / elapsedTimeMs
+            } else {
+                0.0
+            }
+            
+            speedCheckState.value = SpeedCheckState(
+                isRunning = false,
+                packetsSent = packetsSent,
+                totalPackets = totalPackets,
+                totalBytesSent = totalBytesSent,
+                elapsedTimeMs = elapsedTimeMs,
+                throughputBytesPerSecond = throughputBytesPerSecond
+            )
+        } catch (e: Exception) {
+            speedCheckState.value = SpeedCheckState(
+                isRunning = false,
+                error = e.message ?: "Unknown error"
+            )
         }
     }
 }
