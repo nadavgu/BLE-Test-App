@@ -25,6 +25,10 @@ class BleGattServerController(
 ) {
     companion object {
         private const val TAG = "BleGattServerController"
+        
+        // Hardcoded Speed Check Service and Characteristic UUIDs
+        val SPEED_CHECK_SERVICE_UUID = UUID.fromString("0000FF00-0000-1000-8000-00805F9B34FB")
+        val SPEED_CHECK_CHARACTERISTIC_UUID = UUID.fromString("0000FF01-0000-1000-8000-00805F9B34FB")
     }
     
     private val bleRequirements = BleRequirements(context)
@@ -38,6 +42,9 @@ class BleGattServerController(
     
     // Characteristic UUIDs (configurable, multiple)
     private var characteristicUuids: List<UUID> = listOf(UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB"))
+    
+    // Speed check service toggle (hardcoded, cannot be removed)
+    private var speedCheckEnabled: Boolean = true
 
     private var server: BleServer? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -100,6 +107,18 @@ class BleGattServerController(
         this.characteristicUuids = uuids
         return true
     }
+    
+    fun setSpeedCheckEnabled(enabled: Boolean): Boolean {
+        if (isRunning) {
+            Log.w(TAG, "setSpeedCheckEnabled: Cannot change speed check setting while server is running")
+            return false
+        }
+        Log.d(TAG, "setSpeedCheckEnabled: Setting speed check enabled=$enabled")
+        this.speedCheckEnabled = enabled
+        return true
+    }
+    
+    fun getSpeedCheckEnabled(): Boolean = speedCheckEnabled
 
     @SuppressLint("MissingPermission")
     fun startServer(): Boolean {
@@ -126,9 +145,23 @@ class BleGattServerController(
 
         return try {
             Log.i(TAG, "startServer: Creating server manager with service UUID=$serviceUuid")
+            // Build list of services
+            val services = mutableListOf<BleServiceSpec>()
+            
+            // Add user-configured service
+            services.add(BleServiceSpec(serviceUuid, characteristicUuids))
+            
+            // Add speed check service if enabled
+            if (speedCheckEnabled) {
+                Log.d(TAG, "startServer: Adding speed check service")
+                services.add(BleServiceSpec(
+                    SPEED_CHECK_SERVICE_UUID,
+                    listOf(SPEED_CHECK_CHARACTERISTIC_UUID)
+                ))
+            }
+            
             // Create server manager
-            val spec = BleServerSpec(listOf(BleServiceSpec(serviceUuid,
-                characteristicUuids)))
+            val spec = BleServerSpec(services)
             server = BleServer.open(context, spec, listener)
 
             Log.d(TAG, "startServer: Server manager opened, starting advertising")

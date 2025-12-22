@@ -116,7 +116,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                 ))
             },
             manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "0x004C",
-            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03"
+            manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03",
+            speedCheckEnabled = gattServerController.getSpeedCheckEnabled()
         )
         
         setContent {
@@ -249,6 +250,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                                             manufacturerData = data,
                                             manufacturerDataError = null
                                         )
+                                    },
+                                    onSpeedCheckToggle = { enabled ->
+                                        if (gattServerController.setSpeedCheckEnabled(enabled)) {
+                                            gattServerState = gattServerState.copy(
+                                                speedCheckEnabled = enabled
+                                            )
+                                        }
                                     },
                                     onToggleServer = {
                                         if (gattServerController.isRunning) {
@@ -822,6 +830,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
             connectedClientCount = clientCount,
             connectedClients = connectedClients,
             dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic,
+            speedCheckEnabled = gattServerController.getSpeedCheckEnabled(),
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
             characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },

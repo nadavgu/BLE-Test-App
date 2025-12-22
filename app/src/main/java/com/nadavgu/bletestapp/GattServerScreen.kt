@@ -42,7 +42,8 @@ data class GattServerState(
     val dataReceivedByClientServiceAndCharacteristic: Map<String, Map<String, Map<String, String>>> = emptyMap(),
     val uuidError: String? = null,
     val manufacturerIdError: String? = null,
-    val manufacturerDataError: String? = null
+    val manufacturerDataError: String? = null,
+    val speedCheckEnabled: Boolean = true
 )
 
 @Composable
@@ -54,6 +55,7 @@ fun GattServerScreen(
     onCharacteristicUuidChange: (String, String) -> Unit,
     onManufacturerIdChange: (String) -> Unit,
     onManufacturerDataChange: (String) -> Unit,
+    onSpeedCheckToggle: (Boolean) -> Unit,
     onToggleServer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -197,6 +199,35 @@ fun GattServerScreen(
                             ),
                             singleLine = true
                         )
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Speed Check Service toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Speed Check Service",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "Hardcoded service for speed testing",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = state.speedCheckEnabled,
+                                onCheckedChange = onSpeedCheckToggle,
+                                enabled = !state.isRunning
+                            )
+                        }
                         
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
