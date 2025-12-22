@@ -8,5 +8,5 @@ interface BleServerListener {
     fun onServerError(errorCode: Int) {}
     fun onClientConnected(device: BluetoothDevice) {}
     fun onClientDisconnected(device: BluetoothDevice) {}
-    fun onDataReceived(data: ByteArray) {}
+    fun onDataReceived(clientDevice: BluetoothDevice, data: ByteArray) {}
 }

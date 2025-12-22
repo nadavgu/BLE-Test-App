@@ -49,7 +49,7 @@ class ClientConnectionsManager(private val context: Context,
         // The nordicsemi library's BleServerManager manages the server-side connection,
         // but we create a BleManager to interact with the client
         val manager = ConnectedClientBleManager(context, device, serverSpec) { device, data ->
-            listener.onDataReceived(data.value ?: byteArrayOf())
+            listener.onDataReceived(device, data.value ?: byteArrayOf())
         }
         manager.useServer(serverManager)
         manager.attachClientConnection(device)

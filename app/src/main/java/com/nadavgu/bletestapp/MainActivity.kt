@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
     private lateinit var connectionController: BleConnectionController
 
 
-    private var receivedDataHistory = StringBuilder()
+    private val receivedDataHistoryByClient = mutableMapOf<String, StringBuilder>()
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
@@ -774,19 +774,25 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
     override fun onClientDisconnected(device: BluetoothDevice) {
         Log.i(TAG, "onClientDisconnected: Client disconnected from GATT server - ${device.address}")
         runOnUiThread {
+            // Clean up data history for disconnected client
+            receivedDataHistoryByClient.remove(device.address)
             updateGattServerUi()
         }
     }
 
-    override fun onDataReceived(data: ByteArray) {
+    override fun onDataReceived(clientDevice: BluetoothDevice, data: ByteArray) {
         runOnUiThread {
             val dataString = data.joinToString(" ") { "%02X".format(it) }
-            receivedDataHistory.append("${System.currentTimeMillis()}: $dataString\n")
-            if (receivedDataHistory.length > 1000) {
-                receivedDataHistory.delete(0, receivedDataHistory.length - 1000)
+            val history = receivedDataHistoryByClient.getOrPut(clientDevice.address) { StringBuilder() }
+            history.append("${System.currentTimeMillis()}: $dataString\n")
+            if (history.length > 1000) {
+                history.delete(0, history.length - 1000)
             }
+            
+            // Convert StringBuilder map to String map for state
+            val dataReceivedByClient = receivedDataHistoryByClient.mapValues { it.value.toString() }
             gattServerState = gattServerState.copy(
-                dataReceived = receivedDataHistory.toString()
+                dataReceivedByClient = dataReceivedByClient
             )
         }
     }
@@ -797,11 +803,15 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
         val clientCount = gattServerController.connectedClientCount
         val connectedClients = gattServerController.getConnectedClients()
         
+        // Convert StringBuilder map to String map for state
+        val dataReceivedByClient = receivedDataHistoryByClient.mapValues { it.value.toString() }
+        
         gattServerState = gattServerState.copy(
             isRunning = running,
             serverAddress = address,
             connectedClientCount = clientCount,
             connectedClients = connectedClients,
+            dataReceivedByClient = dataReceivedByClient,
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
             characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },

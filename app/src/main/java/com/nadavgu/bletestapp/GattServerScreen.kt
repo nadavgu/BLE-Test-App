@@ -39,7 +39,7 @@ data class GattServerState(
     val characteristics: List<CharacteristicEntry> = emptyList(),
     val manufacturerId: String = "",
     val manufacturerData: String = "",
-    val dataReceived: String = "",
+    val dataReceivedByClient: Map<String, String> = emptyMap(),
     val uuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null
@@ -59,6 +59,7 @@ fun GattServerScreen(
 ) {
     val context = LocalContext.current
     var showAdvancedParams by remember { mutableStateOf(false) }
+    var expandedClients by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     Column(
         modifier = modifier
@@ -123,39 +124,8 @@ fun GattServerScreen(
                     text = context.getString(R.string.gatt_server_connected_clients, state.connectedClientCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
-                
-                // Show connected clients list
-                if (state.connectedClients.isNotEmpty()) {
-                    state.connectedClients.forEach { client ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = client.name,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = client.address,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else if (state.isRunning) {
-                    Text(
-                        text = "No clients connected",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                    )
-                }
             }
         }
         
@@ -360,34 +330,131 @@ fun GattServerScreen(
             )
         }
         
-        // Data received card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
+        // Connected Clients section
+        if (state.isRunning) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(top = 16.dp)
             ) {
                 Text(
-                    text = context.getString(R.string.gatt_server_data_title),
-                    style = MaterialTheme.typography.titleSmall,
+                    text = "Connected Clients",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
                 
-                Text(
-                    text = state.dataReceived.ifEmpty { "No data received yet" },
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 60.dp)
-                )
+                if (state.connectedClients.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Text(
+                            text = "No clients connected",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    state.connectedClients.forEach { client ->
+                        val isExpanded = expandedClients.contains(client.address)
+                        val clientData = state.dataReceivedByClient[client.address] ?: ""
+                        
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Client header (always visible)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            expandedClients = if (isExpanded) {
+                                                expandedClients - client.address
+                                            } else {
+                                                expandedClients + client.address
+                                            }
+                                        }
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = client.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = client.address,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = if (isExpanded) "Collapse" else "Expand"
+                                    )
+                                }
+                                
+                                // Expanded content
+                                AnimatedVisibility(
+                                    visible = isExpanded,
+                                    enter = expandVertically(),
+                                    exit = shrinkVertically()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(bottom = 12.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                        
+                                        // Received Data section
+                                        Text(
+                                            text = context.getString(R.string.gatt_server_data_title),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                        
+                                        if (clientData.isEmpty()) {
+                                            Text(
+                                                text = "No data received yet",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                                modifier = Modifier.padding(bottom = 8.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = clientData,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(min = 40.dp)
+                                                    .padding(bottom = 8.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

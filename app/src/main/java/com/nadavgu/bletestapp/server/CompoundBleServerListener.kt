@@ -23,7 +23,7 @@ class CompoundBleServerListener(private vararg val listeners: BleServerListener)
         listeners.forEach { it.onClientDisconnected(device) }
     }
 
-    override fun onDataReceived(data: ByteArray) {
-        listeners.forEach { it.onDataReceived(data) }
+    override fun onDataReceived(clientDevice: BluetoothDevice, data: ByteArray) {
+        listeners.forEach { it.onDataReceived(clientDevice, data) }
     }
 }
