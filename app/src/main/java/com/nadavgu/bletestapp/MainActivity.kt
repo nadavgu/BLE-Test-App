@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
     private lateinit var connectionController: BleConnectionController
 
 
-    private val receivedDataHistoryByClient = mutableMapOf<String, StringBuilder>()
+    private val receivedDataHistoryByClientServiceAndCharacteristic = mutableMapOf<String, MutableMap<String, MutableMap<String, StringBuilder>>>()
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
@@ -775,24 +775,30 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
         Log.i(TAG, "onClientDisconnected: Client disconnected from GATT server - ${device.address}")
         runOnUiThread {
             // Clean up data history for disconnected client
-            receivedDataHistoryByClient.remove(device.address)
+            receivedDataHistoryByClientServiceAndCharacteristic.remove(device.address)
             updateGattServerUi()
         }
     }
 
-    override fun onDataReceived(clientDevice: BluetoothDevice, data: ByteArray) {
+    override fun onDataReceived(clientDevice: BluetoothDevice, serviceUuid: String, characteristicUuid: String, data: ByteArray) {
         runOnUiThread {
             val dataString = data.joinToString(" ") { "%02X".format(it) }
-            val history = receivedDataHistoryByClient.getOrPut(clientDevice.address) { StringBuilder() }
+            val clientMap = receivedDataHistoryByClientServiceAndCharacteristic.getOrPut(clientDevice.address) { mutableMapOf() }
+            val serviceMap = clientMap.getOrPut(serviceUuid) { mutableMapOf() }
+            val history = serviceMap.getOrPut(characteristicUuid) { StringBuilder() }
             history.append("${System.currentTimeMillis()}: $dataString\n")
             if (history.length > 1000) {
                 history.delete(0, history.length - 1000)
             }
             
-            // Convert StringBuilder map to String map for state
-            val dataReceivedByClient = receivedDataHistoryByClient.mapValues { it.value.toString() }
+            // Convert nested map to Map<String, Map<String, Map<String, String>>> for state
+            val dataReceivedByClientServiceAndCharacteristic = receivedDataHistoryByClientServiceAndCharacteristic.mapValues { clientMap ->
+                clientMap.value.mapValues { serviceMap ->
+                    serviceMap.value.mapValues { it.value.toString() }
+                }
+            }
             gattServerState = gattServerState.copy(
-                dataReceivedByClient = dataReceivedByClient
+                dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic
             )
         }
     }
@@ -803,15 +809,19 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
         val clientCount = gattServerController.connectedClientCount
         val connectedClients = gattServerController.getConnectedClients()
         
-        // Convert StringBuilder map to String map for state
-        val dataReceivedByClient = receivedDataHistoryByClient.mapValues { it.value.toString() }
+        // Convert nested map to Map<String, Map<String, Map<String, String>>> for state
+        val dataReceivedByClientServiceAndCharacteristic = receivedDataHistoryByClientServiceAndCharacteristic.mapValues { clientMap ->
+            clientMap.value.mapValues { serviceMap ->
+                serviceMap.value.mapValues { it.value.toString() }
+            }
+        }
         
         gattServerState = gattServerState.copy(
             isRunning = running,
             serverAddress = address,
             connectedClientCount = clientCount,
             connectedClients = connectedClients,
-            dataReceivedByClient = dataReceivedByClient,
+            dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic,
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
             characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },

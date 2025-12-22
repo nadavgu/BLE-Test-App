@@ -8,13 +8,12 @@ import android.content.Context
 import android.util.Log
 import com.nadavgu.bletestapp.server.spec.BleServerSpec
 import no.nordicsemi.android.ble.BleManager
-import no.nordicsemi.android.ble.callback.DataReceivedCallback
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 
 // This BleManager is attached to each client connection for potential interactions
 class ConnectedClientBleManager(context: Context, private val device: BluetoothDevice,
                                 private val serverSpec: BleServerSpec,
-                                private val writeCallback: DataReceivedCallback) : BleManager(context) {
+                                private val listener: BleServerListener) : BleManager(context) {
     companion object {
         private const val TAG = "ConnectedClientBleManager"
     }
@@ -37,7 +36,13 @@ class ConnectedClientBleManager(context: Context, private val device: BluetoothD
             val service = server.getService(serviceSpec.uuid)!!
             serviceSpec.characteristicUuids.forEach { characteristicUuid ->
                 val characteristic = service.getCharacteristic(characteristicUuid)!!
-                super.setWriteCallback(characteristic).with(writeCallback)
+                val serviceUuidStr = serviceSpec.uuid.toString()
+                val characteristicUuidStr = characteristicUuid.toString()
+                super.setWriteCallback(characteristic).with { device, data ->
+                    listener.onDataReceived(device, serviceUuidStr,
+                        characteristicUuidStr, data.value ?: byteArrayOf())
+
+                }
             }
         }
     }

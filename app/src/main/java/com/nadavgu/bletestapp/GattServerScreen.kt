@@ -39,7 +39,7 @@ data class GattServerState(
     val characteristics: List<CharacteristicEntry> = emptyList(),
     val manufacturerId: String = "",
     val manufacturerData: String = "",
-    val dataReceivedByClient: Map<String, String> = emptyMap(),
+    val dataReceivedByClientServiceAndCharacteristic: Map<String, Map<String, Map<String, String>>> = emptyMap(),
     val uuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null
@@ -360,7 +360,7 @@ fun GattServerScreen(
                 } else {
                     state.connectedClients.forEach { client ->
                         val isExpanded = expandedClients.contains(client.address)
-                        val clientData = state.dataReceivedByClient[client.address] ?: ""
+                        val clientDataByServiceAndCharacteristic = state.dataReceivedByClientServiceAndCharacteristic[client.address] ?: emptyMap()
                         
                         Card(
                             modifier = Modifier
@@ -426,10 +426,10 @@ fun GattServerScreen(
                                             text = context.getString(R.string.gatt_server_data_title),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium,
-                                            modifier = Modifier.padding(bottom = 8.dp)
+                                            modifier = Modifier.padding(bottom = 12.dp)
                                         )
                                         
-                                        if (clientData.isEmpty()) {
+                                        if (clientDataByServiceAndCharacteristic.isEmpty()) {
                                             Text(
                                                 text = "No data received yet",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -438,16 +438,71 @@ fun GattServerScreen(
                                                 modifier = Modifier.padding(bottom = 8.dp)
                                             )
                                         } else {
-                                            Text(
-                                                text = clientData,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(min = 40.dp)
-                                                    .padding(bottom = 8.dp)
-                                            )
+                                            // Show data grouped by service, then by characteristic
+                                            val serviceEntries = clientDataByServiceAndCharacteristic.entries.toList()
+                                            serviceEntries.forEachIndexed { serviceIndex, (serviceUuid, characteristicsMap) ->
+                                                Column(
+                                                    modifier = Modifier.padding(bottom = 16.dp)
+                                                ) {
+                                                    // Service UUID header
+                                                    Text(
+                                                        text = serviceUuid,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    )
+                                                    
+                                                    // Characteristics within this service
+                                                    val characteristicEntries = characteristicsMap.entries.toList()
+                                                    characteristicEntries.forEachIndexed { charIndex, (characteristicUuid, data) ->
+                                                        Column(
+                                                            modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
+                                                        ) {
+                                                            // Characteristic UUID header
+                                                            Text(
+                                                                text = characteristicUuid,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontFamily = FontFamily.Monospace,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = MaterialTheme.colorScheme.secondary,
+                                                                modifier = Modifier.padding(bottom = 4.dp)
+                                                            )
+                                                            
+                                                            // Data for this characteristic
+                                                            if (data.isEmpty()) {
+                                                                Text(
+                                                                    text = "No data received yet",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                                                    modifier = Modifier.padding(start = 8.dp)
+                                                                )
+                                                            } else {
+                                                                Text(
+                                                                    text = data,
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    fontFamily = FontFamily.Monospace,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .heightIn(min = 40.dp)
+                                                                        .padding(start = 8.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Divider between services (except for last one)
+                                                    if (serviceIndex < serviceEntries.size - 1) {
+                                                        HorizontalDivider(
+                                                            modifier = Modifier.padding(vertical = 8.dp),
+                                                            color = MaterialTheme.colorScheme.outlineVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
