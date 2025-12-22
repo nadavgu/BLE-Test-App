@@ -381,6 +381,29 @@ private fun ConnectedDeviceItem(
                 )
             }
             
+            // Speed check button
+            val hasSpeedCheckCharacteristic = deviceHasSpeedCheckCharacteristic(device)
+            val isButtonEnabled = hasSpeedCheckCharacteristic && !device.isConnecting && !device.isDisconnected
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Button(
+                onClick = {
+                    // Write a simple test data to speed check characteristic
+                    val testData = byteArrayOf(0x01, 0x02, 0x03, 0x04)
+                    onWriteCharacteristic(
+                        device.address,
+                        BleGattServerController.SPEED_CHECK_SERVICE_UUID,
+                        BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
+                        testData
+                    )
+                },
+                enabled = isButtonEnabled,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "Write to Speed Check Characteristic")
+            }
+            
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -501,6 +524,15 @@ private fun formatCharacteristicProperties(properties: Int): String {
         props.add("SIGNED_WRITE")
     }
     return props.joinToString(", ").ifEmpty { "NONE" }
+}
+
+private fun deviceHasSpeedCheckCharacteristic(device: ConnectedDevice): Boolean {
+    return device.services.any { service ->
+        service.uuid == BleGattServerController.SPEED_CHECK_SERVICE_UUID &&
+        service.characteristics.any { characteristic ->
+            characteristic.uuid == BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID
+        }
+    }
 }
 
 @Composable
