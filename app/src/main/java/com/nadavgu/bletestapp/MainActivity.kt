@@ -787,21 +787,41 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
             
             // Check if this is speed check data
             if (serviceUuid == speedCheckServiceUuid && characteristicUuid == speedCheckCharacteristicUuid) {
-                // Update speed check state instead of storing data
-                val currentState = speedCheckStateByClient.getOrPut(clientDevice.address) {
-                    ServerSpeedCheckState(
+                // Check if this is a control message (speed check start)
+                val totalPackets = BleGattServerController.parseSpeedCheckControlMessage(data)
+                if (totalPackets != null) {
+                    // This is a control message - reset/initialize speed check state
+                    Log.d(TAG, "onDataReceived: Speed check control message received: totalPackets=$totalPackets")
+                    speedCheckStateByClient[clientDevice.address] = ServerSpeedCheckState(
                         isRunning = true,
-                        startTime = System.currentTimeMillis()
+                        packetsReceived = 0,
+                        totalPackets = totalPackets,
+                        bytesReceived = 0,
+                        startTime = System.currentTimeMillis(),
+                        lastUpdateTime = System.currentTimeMillis()
                     )
+                } else {
+                    // This is a data packet - update speed check state
+                    val currentState = speedCheckStateByClient[clientDevice.address]
+                    if (currentState != null && currentState.isRunning) {
+                        val newState = currentState.copy(
+                            packetsReceived = currentState.packetsReceived + 1,
+                            bytesReceived = currentState.bytesReceived + data.size,
+                            lastUpdateTime = System.currentTimeMillis()
+                        )
+                        speedCheckStateByClient[clientDevice.address] = newState
+                    } else {
+                        // No active speed check, but received data - initialize state
+                        speedCheckStateByClient[clientDevice.address] = ServerSpeedCheckState(
+                            isRunning = true,
+                            packetsReceived = 1,
+                            totalPackets = 0, // Unknown total
+                            bytesReceived = data.size.toLong(),
+                            startTime = System.currentTimeMillis(),
+                            lastUpdateTime = System.currentTimeMillis()
+                        )
+                    }
                 }
-                val newState = currentState.copy(
-                    isRunning = true,
-                    packetsReceived = currentState.packetsReceived + 1,
-                    bytesReceived = currentState.bytesReceived + data.size,
-                    lastUpdateTime = System.currentTimeMillis(),
-                    startTime = currentState.startTime ?: System.currentTimeMillis()
-                )
-                speedCheckStateByClient[clientDevice.address] = newState
             } else {
                 // Store regular data (not speed check)
                 val dataString = data.joinToString(" ") { "%02X".format(it) }

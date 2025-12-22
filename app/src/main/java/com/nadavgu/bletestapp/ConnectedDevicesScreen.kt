@@ -738,7 +738,19 @@ private fun performSpeedCheck(
     
     scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            // Send packets sequentially - each write blocks until completion
+            // First, send control message to notify server of speed check start and total packets
+            val controlMessage = BleGattServerController.createSpeedCheckControlMessage(totalPackets)
+            val controlSuccess = onWriteCharacteristic(
+                deviceAddress,
+                BleGattServerController.SPEED_CHECK_SERVICE_UUID,
+                BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
+                controlMessage
+            )
+            if (!controlSuccess) {
+                throw Exception("Failed to send speed check control message")
+            }
+            
+            // Then send data packets sequentially - each write blocks until completion
             repeat(totalPackets) { index ->
                 val success = onWriteCharacteristic(
                     deviceAddress,

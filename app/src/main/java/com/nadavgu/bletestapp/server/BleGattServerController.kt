@@ -29,6 +29,42 @@ class BleGattServerController(
         // Hardcoded Speed Check Service and Characteristic UUIDs
         val SPEED_CHECK_SERVICE_UUID = UUID.fromString("0000FF00-0000-1000-8000-00805F9B34FB")
         val SPEED_CHECK_CHARACTERISTIC_UUID = UUID.fromString("0000FF01-0000-1000-8000-00805F9B34FB")
+        
+        // Speed check control message protocol
+        // Control message format: [0xFF (magic byte), 4 bytes for total packets (Int, little-endian)]
+        private const val SPEED_CHECK_CONTROL_MAGIC: Byte = 0xFF.toByte()
+        private const val SPEED_CHECK_CONTROL_MESSAGE_SIZE = 5 // 1 byte magic + 4 bytes Int
+        
+        /**
+         * Creates a speed check control message
+         * Format: [0xFF, totalPackets as 4-byte Int (little-endian)]
+         */
+        fun createSpeedCheckControlMessage(totalPackets: Int): ByteArray {
+            val message = ByteArray(SPEED_CHECK_CONTROL_MESSAGE_SIZE)
+            message[0] = SPEED_CHECK_CONTROL_MAGIC
+            // Write Int as little-endian bytes
+            message[1] = (totalPackets and 0xFF).toByte()
+            message[2] = ((totalPackets shr 8) and 0xFF).toByte()
+            message[3] = ((totalPackets shr 16) and 0xFF).toByte()
+            message[4] = ((totalPackets shr 24) and 0xFF).toByte()
+            return message
+        }
+        
+        /**
+         * Parses a speed check control message
+         * Returns totalPackets if valid, null otherwise
+         */
+        fun parseSpeedCheckControlMessage(data: ByteArray): Int? {
+            if (data.size != SPEED_CHECK_CONTROL_MESSAGE_SIZE) return null
+            if (data[0] != SPEED_CHECK_CONTROL_MAGIC) return null
+            
+            // Read Int from little-endian bytes
+            val totalPackets = (data[1].toInt() and 0xFF) or
+                    ((data[2].toInt() and 0xFF) shl 8) or
+                    ((data[3].toInt() and 0xFF) shl 16) or
+                    ((data[4].toInt() and 0xFF) shl 24)
+            return totalPackets
+        }
     }
     
     private val bleRequirements = BleRequirements(context)

@@ -33,6 +33,7 @@ data class CharacteristicEntry(
 data class ServerSpeedCheckState(
     val isRunning: Boolean = false,
     val packetsReceived: Int = 0,
+    val totalPackets: Int = 0,
     val bytesReceived: Long = 0,
     val startTime: Long? = null,
     val lastUpdateTime: Long? = null
@@ -507,11 +508,25 @@ fun GattServerScreen(
                                                     }
                                                     
                                                     Text(
-                                                        text = "Packets: ${speedCheckState.packetsReceived}",
+                                                        text = if (speedCheckState.totalPackets > 0) {
+                                                            "Packets: ${speedCheckState.packetsReceived} / ${speedCheckState.totalPackets}"
+                                                        } else {
+                                                            "Packets: ${speedCheckState.packetsReceived}"
+                                                        },
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                         modifier = Modifier.padding(bottom = 4.dp)
                                                     )
+                                                    if (speedCheckState.totalPackets > 0) {
+                                                        LinearProgressIndicator(
+                                                            progress = { speedCheckState.packetsReceived.toFloat() / speedCheckState.totalPackets },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(vertical = 8.dp),
+                                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
+                                                        )
+                                                    }
                                                     Text(
                                                         text = "Bytes: ${String.format("%.2f", speedCheckState.bytesReceived / 1024.0)} KB",
                                                         style = MaterialTheme.typography.bodyMedium,
