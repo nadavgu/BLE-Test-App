@@ -46,9 +46,10 @@ import androidx.compose.ui.unit.sp
 import com.nadavgu.bletestapp.server.BleGattServerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Deferred
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
+
+private const val SPEED_CHECK_PACKET_SIZE = 512
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -248,7 +249,7 @@ fun ConnectedDevicesScreen(
                                     totalBytesMB.value.toDoubleOrNull()?.let { mb ->
                                         if (mb > 0) {
                                             val totalBytes = (mb * 1024 * 1024).toLong()
-                                            val packetCount = (totalBytes / 512).toInt()
+                                            val packetCount = (totalBytes / SPEED_CHECK_PACKET_SIZE).toInt()
                                             Text(
                                                 text = "Will send approximately $packetCount packets (${String.format("%.2f", totalBytes / 1024.0 / 1024.0)} MB)",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -722,7 +723,7 @@ private fun performSpeedCheck(
     scope: CoroutineScope,
     totalBytesMB: Double = 1.0
 ) {
-    val packetSize = 512 // Fixed packet size
+    val packetSize = SPEED_CHECK_PACKET_SIZE // Fixed packet size
     val totalBytes = (totalBytesMB * 1024 * 1024).toLong()
     val totalPackets = (totalBytes / packetSize).toInt()
     val packetData = ByteArray(packetSize) { it.toByte() }
