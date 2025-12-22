@@ -8,6 +8,8 @@ import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattService
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
@@ -71,9 +73,15 @@ class BleConnectionController(
                 characteristic.writeType = writeType
             }
 
-            // Use the protected method from parent class
-            writeCharacteristic(characteristic, data, writeType).enqueue()
-            return true
+            return try {
+                // Use await() for synchronous write - it blocks until completion
+                writeCharacteristic(characteristic, data, writeType).await()
+                Log.d(TAG, "writeCharacteristic: Write completed successfully")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "writeCharacteristic: Write failed with exception", e)
+                false
+            }
         }
     }
 
@@ -288,7 +296,7 @@ class BleConnectionController(
             val success = manager.writeCharacteristic(serviceUuid, characteristicUuid, data, writeType)
             
             if (success) {
-                Log.d(TAG, "writeCharacteristic: Write request enqueued")
+                Log.d(TAG, "writeCharacteristic: Write completed")
             }
             success
         } catch (e: SecurityException) {

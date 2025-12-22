@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.nadavgu.bletestapp.server.BleGattServerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Deferred
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
 
@@ -56,7 +57,7 @@ fun ConnectedDevicesScreen(
     onConnectByAddress: (String) -> Unit,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onWriteCharacteristic: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -205,7 +206,7 @@ fun ConnectedDevicesScreen(
                                 ) {
                                     // Packet size info (read-only)
                                     Text(
-                                        text = "Packet Size: 512 bytes (fixed)",
+                                        text = "Packet Size:  bytes (fixed)",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(bottom = 16.dp)
@@ -281,7 +282,7 @@ private fun ConnectedDeviceItem(
     device: ConnectedDevice,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Unit,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
     totalBytesMB: Double = 1.0
 ) {
     val context = LocalContext.current
@@ -590,11 +591,12 @@ private fun ConnectedDeviceItem(
 @Composable
 private fun CharacteristicWriteSection(
     deviceAddress: String,
-    serviceUuid: java.util.UUID,
-    characteristicUuid: java.util.UUID,
-    onWrite: (String, java.util.UUID, java.util.UUID, ByteArray) -> Unit
+    serviceUuid: UUID,
+    characteristicUuid: UUID,
+    onWrite: (String, UUID, UUID, ByteArray) -> Boolean
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val writeData = remember { mutableStateOf("") }
     val writeError = remember { mutableStateOf<String?>(null) }
     
@@ -621,8 +623,14 @@ private fun CharacteristicWriteSection(
             writeError.value = context.getString(R.string.connected_device_write_empty)
             return
         }
-        onWrite(deviceAddress, serviceUuid, characteristicUuid, data)
-        writeData.value = ""
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val success = onWrite(deviceAddress, serviceUuid, characteristicUuid, data)
+            if (success) {
+                writeData.value = ""
+            } else {
+                writeError.value = "Write failed"
+            }
+        }
     }
     
     Column {
@@ -709,7 +717,7 @@ private fun deviceHasSpeedCheckCharacteristic(device: ConnectedDevice): Boolean 
 
 private fun performSpeedCheck(
     deviceAddress: String,
-    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Unit,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
     speedCheckState: androidx.compose.runtime.MutableState<SpeedCheckState?>,
     scope: CoroutineScope,
     totalBytesMB: Double = 1.0
@@ -727,17 +735,21 @@ private fun performSpeedCheck(
     val startTime = System.currentTimeMillis()
     var packetsSent = 0
     
-    scope.launch {
+    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            // Send packets sequentially with small delays to avoid overwhelming the stack
+            // Send packets sequentially - each write blocks until completion
             repeat(totalPackets) { index ->
-                onWriteCharacteristic(
+                val success = onWriteCharacteristic(
                     deviceAddress,
                     BleGattServerController.SPEED_CHECK_SERVICE_UUID,
                     BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
                     packetData
                 )
-                packetsSent++
+                if (success) {
+                    packetsSent++
+                } else {
+                    throw Exception("Write failed at packet $index")
+                }
                 
                 // Update progress
                 speedCheckState.value = SpeedCheckState(
