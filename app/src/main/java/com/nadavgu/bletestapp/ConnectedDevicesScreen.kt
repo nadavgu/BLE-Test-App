@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nadavgu.bletestapp.server.BleGattServerController
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -221,144 +222,147 @@ private fun ConnectedDeviceItem(
             }
             
             // Services section
-            if (device.services.isNotEmpty() && !device.isConnecting && !device.isDisconnected) {
+            val visibleServices = device.services.filter { it.uuid != BleGattServerController.SPEED_CHECK_SERVICE_UUID }
+            if (visibleServices.isNotEmpty() && !device.isConnecting && !device.isDisconnected) {
                 Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
-                    text = context.getString(R.string.connected_device_services_title, device.services.size),
+                    text = context.getString(R.string.connected_device_services_title, visibleServices.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
-                device.services.forEach { service ->
-                    val serviceKey = "${device.address}_${service.uuid}"
-                    val isExpanded = expandedServices.value.contains(serviceKey)
-                    
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Column(
+                visibleServices.forEach { service ->
+                        // Show regular service with expandable details
+                        val serviceKey = "${device.address}_${service.uuid}"
+                        val isExpanded = expandedServices.value.contains(serviceKey)
+                        
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp)
+                                .padding(bottom = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { 
-                                        val currentSet = expandedServices.value.toMutableSet()
-                                        if (isExpanded) {
-                                            currentSet.remove(serviceKey)
-                                        } else {
-                                            currentSet.add(serviceKey)
-                                        }
-                                        expandedServices.value = currentSet
-                                    },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(12.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = context.getString(R.string.connected_device_service_uuid),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = service.uuid.toString().uppercase(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                    Text(
-                                        text = context.getString(
-                                            R.string.connected_device_characteristics_count,
-                                            service.characteristics.size
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-                                Icon(
-                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (isExpanded) {
-                                        context.getString(R.string.connected_device_collapse)
-                                    } else {
-                                        context.getString(R.string.connected_device_expand)
-                                    }
-                                )
-                            }
-                            
-                            AnimatedVisibility(
-                                visible = isExpanded,
-                                enter = expandVertically(),
-                                exit = shrinkVertically()
-                            ) {
-                                Column(
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 8.dp)
+                                        .clickable { 
+                                            val currentSet = expandedServices.value.toMutableSet()
+                                            if (isExpanded) {
+                                                currentSet.remove(serviceKey)
+                                            } else {
+                                                currentSet.add(serviceKey)
+                                            }
+                                            expandedServices.value = currentSet
+                                        },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                    Text(
-                                        text = context.getString(R.string.connected_device_characteristics_title),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = context.getString(R.string.connected_device_service_uuid),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = service.uuid.toString().uppercase(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Text(
+                                            text = context.getString(
+                                                R.string.connected_device_characteristics_count,
+                                                service.characteristics.size
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = if (isExpanded) {
+                                            context.getString(R.string.connected_device_collapse)
+                                        } else {
+                                            context.getString(R.string.connected_device_expand)
+                                        }
                                     )
-                                    
-                                    service.characteristics.forEach { characteristic ->
-                                        val hasWrite = (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE != 0) ||
-                                                (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+                                }
+                                
+                                AnimatedVisibility(
+                                    visible = isExpanded,
+                                    enter = expandVertically(),
+                                    exit = shrinkVertically()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp)
+                                    ) {
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                        Text(
+                                            text = context.getString(R.string.connected_device_characteristics_title),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        )
                                         
-                                        Card(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(bottom = 4.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.surface
-                                            )
-                                        ) {
-                                            Column(
+                                        service.characteristics.forEach { characteristic ->
+                                            val hasWrite = (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE != 0) ||
+                                                    (characteristic.properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+                                            
+                                            Card(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(8.dp)
+                                                    .padding(bottom = 4.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surface
+                                                )
                                             ) {
-                                                Text(
-                                                    text = context.getString(R.string.connected_device_characteristic_uuid),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = characteristic.uuid.toString().uppercase(),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
-                                                Text(
-                                                    text = context.getString(
-                                                        R.string.connected_device_characteristic_properties,
-                                                        formatCharacteristicProperties(characteristic.properties)
-                                                    ),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(top = 2.dp)
-                                                )
-                                                
-                                                // Write section for writable characteristics
-                                                if (hasWrite) {
-                                                    Spacer(modifier = Modifier.height(8.dp))
-                                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                                    CharacteristicWriteSection(
-                                                        deviceAddress = device.address,
-                                                        serviceUuid = service.uuid,
-                                                        characteristicUuid = characteristic.uuid,
-                                                        onWrite = onWriteCharacteristic
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = context.getString(R.string.connected_device_characteristic_uuid),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
+                                                    Text(
+                                                        text = characteristic.uuid.toString().uppercase(),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                    Text(
+                                                        text = context.getString(
+                                                            R.string.connected_device_characteristic_properties,
+                                                            formatCharacteristicProperties(characteristic.properties)
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.padding(top = 2.dp)
+                                                    )
+                                                    
+                                                    // Write section for writable characteristics
+                                                    if (hasWrite) {
+                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                                        CharacteristicWriteSection(
+                                                            deviceAddress = device.address,
+                                                            serviceUuid = service.uuid,
+                                                            characteristicUuid = characteristic.uuid,
+                                                            onWrite = onWriteCharacteristic
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -366,9 +370,8 @@ private fun ConnectedDeviceItem(
                                 }
                             }
                         }
-                    }
                 }
-            } else if (!device.isConnecting && !device.isDisconnected && device.services.isEmpty()) {
+            } else if (!device.isConnecting && !device.isDisconnected && visibleServices.isEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
