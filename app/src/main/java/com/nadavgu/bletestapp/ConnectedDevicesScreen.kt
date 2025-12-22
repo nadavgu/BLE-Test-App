@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,7 +59,7 @@ fun ConnectedDevicesScreen(
     onConnectByAddress: (String) -> Unit,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -67,6 +68,8 @@ fun ConnectedDevicesScreen(
     val showSpeedCheckOptions = remember { mutableStateOf(false) }
     val totalBytesMB = remember { mutableStateOf("1") }
     val totalBytesMBError = remember { mutableStateOf<String?>(null) }
+    // Default to WRITE_TYPE_NO_RESPONSE (faster, no acknowledgment)
+    val useWriteWithResponse = remember { mutableStateOf(false) }
 
     fun validateAndConnect() {
         val text = addressInput.value.trim()
@@ -207,7 +210,7 @@ fun ConnectedDevicesScreen(
                                 ) {
                                     // Packet size info (read-only)
                                     Text(
-                                        text = "Packet Size:  bytes (fixed)",
+                                        text = "Packet Size: $SPEED_CHECK_PACKET_SIZE bytes (fixed)",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(bottom = 16.dp)
@@ -258,6 +261,38 @@ fun ConnectedDevicesScreen(
                                             )
                                         }
                                     }
+                                    
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                                    
+                                    // Write type toggle
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Write with Response",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = if (useWriteWithResponse.value) {
+                                                    "Slower but more reliable (with acknowledgment)"
+                                                } else {
+                                                    "Faster (no acknowledgment, default)"
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = useWriteWithResponse.value,
+                                            onCheckedChange = { useWriteWithResponse.value = it }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -270,7 +305,8 @@ fun ConnectedDevicesScreen(
                         onDisconnect = onDisconnect,
                         onRemove = onRemove,
                         onWriteCharacteristic = onWriteCharacteristic,
-                        totalBytesMB = totalBytesMB.value.toDoubleOrNull() ?: 1.0
+                        totalBytesMB = totalBytesMB.value.toDoubleOrNull() ?: 1.0,
+                        useWriteWithResponse = useWriteWithResponse.value
                     )
                 }
             }
@@ -283,8 +319,9 @@ private fun ConnectedDeviceItem(
     device: ConnectedDevice,
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
-    totalBytesMB: Double = 1.0
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
+    totalBytesMB: Double = 1.0,
+    useWriteWithResponse: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -559,7 +596,8 @@ private fun ConnectedDeviceItem(
                         onWriteCharacteristic = onWriteCharacteristic,
                         speedCheckState = speedCheckState,
                         scope = scope,
-                        totalBytesMB = totalBytesMB
+                        totalBytesMB = totalBytesMB,
+                        useWriteWithResponse = useWriteWithResponse
                     )
                 },
                 enabled = isButtonEnabled,
@@ -594,7 +632,7 @@ private fun CharacteristicWriteSection(
     deviceAddress: String,
     serviceUuid: UUID,
     characteristicUuid: UUID,
-    onWrite: (String, UUID, UUID, ByteArray) -> Boolean
+    onWrite: (String, UUID, UUID, ByteArray, Int) -> Boolean
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -625,7 +663,8 @@ private fun CharacteristicWriteSection(
             return
         }
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val success = onWrite(deviceAddress, serviceUuid, characteristicUuid, data)
+            // For regular characteristic writes, use default write type
+            val success = onWrite(deviceAddress, serviceUuid, characteristicUuid, data, android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
             if (success) {
                 writeData.value = ""
             } else {
@@ -718,10 +757,11 @@ private fun deviceHasSpeedCheckCharacteristic(device: ConnectedDevice): Boolean 
 
 private fun performSpeedCheck(
     deviceAddress: String,
-    onWriteCharacteristic: (String, UUID, UUID, ByteArray) -> Boolean,
+    onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
     speedCheckState: androidx.compose.runtime.MutableState<SpeedCheckState?>,
     scope: CoroutineScope,
-    totalBytesMB: Double = 1.0
+    totalBytesMB: Double = 1.0,
+    useWriteWithResponse: Boolean = false
 ) {
     val packetSize = SPEED_CHECK_PACKET_SIZE // Fixed packet size
     val totalBytes = (totalBytesMB * 1024 * 1024).toLong()
@@ -736,6 +776,12 @@ private fun performSpeedCheck(
     val startTime = System.currentTimeMillis()
     var packetsSent = 0
     
+    val writeType = if (useWriteWithResponse) {
+        android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+    } else {
+        android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+    }
+    
     scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         try {
             // First, send control message to notify server of speed check start and total packets
@@ -744,7 +790,8 @@ private fun performSpeedCheck(
                 deviceAddress,
                 BleGattServerController.SPEED_CHECK_SERVICE_UUID,
                 BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
-                controlMessage
+                controlMessage,
+                writeType
             )
             if (!controlSuccess) {
                 throw Exception("Failed to send speed check control message")
@@ -756,7 +803,8 @@ private fun performSpeedCheck(
                     deviceAddress,
                     BleGattServerController.SPEED_CHECK_SERVICE_UUID,
                     BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID,
-                    packetData
+                    packetData,
+                    writeType
                 )
                 if (success) {
                     packetsSent++
