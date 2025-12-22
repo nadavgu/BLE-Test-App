@@ -71,7 +71,7 @@ class BleServer(private val manager: BleServerManager,
                  serverSpec: BleServerSpec,
                  listener: BleServerListener): BleServer {
             val manager = createManager(context, serverSpec)
-            val clientConnectionsManager = ClientConnectionsManager(context,manager)
+            val clientConnectionsManager = ClientConnectionsManager(context, listener, serverSpec,manager)
             val server = BleServer(manager, clientConnectionsManager, listener)
 
             manager.setServerObserver(server.connectionObserver)

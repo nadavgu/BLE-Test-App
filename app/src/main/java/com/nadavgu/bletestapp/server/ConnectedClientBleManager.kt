@@ -3,13 +3,18 @@ package com.nadavgu.bletestapp.server
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattServer
 import android.content.Context
 import android.util.Log
+import com.nadavgu.bletestapp.server.spec.BleServerSpec
 import no.nordicsemi.android.ble.BleManager
+import no.nordicsemi.android.ble.callback.DataReceivedCallback
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 
 // This BleManager is attached to each client connection for potential interactions
-class ConnectedClientBleManager(context: Context, private val device: BluetoothDevice) : BleManager(context) {
+class ConnectedClientBleManager(context: Context, private val device: BluetoothDevice,
+                                private val serverSpec: BleServerSpec,
+                                private val writeCallback: DataReceivedCallback) : BleManager(context) {
     companion object {
         private const val TAG = "ConnectedClientBleManager"
     }
@@ -25,6 +30,16 @@ class ConnectedClientBleManager(context: Context, private val device: BluetoothD
         // Accept any service - we're the server, so we don't need to validate services
         Log.d(TAG, "ConnectedClientBleManager.isRequiredServiceSupported: Client ${device.address} connected")
         return true
+    }
+
+    override fun onServerReady(server: BluetoothGattServer) {
+        serverSpec.services.forEach { serviceSpec ->
+            val service = server.getService(serviceSpec.uuid)!!
+            serviceSpec.characteristicUuids.forEach { characteristicUuid ->
+                val characteristic = service.getCharacteristic(characteristicUuid)!!
+                super.setWriteCallback(characteristic).with(writeCallback)
+            }
+        }
     }
 
     init {

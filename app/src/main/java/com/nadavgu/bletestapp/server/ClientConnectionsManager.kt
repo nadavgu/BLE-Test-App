@@ -3,10 +3,13 @@ package com.nadavgu.bletestapp.server
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
+import com.nadavgu.bletestapp.server.spec.BleServerSpec
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.BleServerManager
 
 class ClientConnectionsManager(private val context: Context,
+                               private val listener: BleServerListener,
+                               private val serverSpec: BleServerSpec,
                                private val serverManager: BleServerManager) {
     companion object {
         private const val TAG = "ClientConnectionsManager"
@@ -45,7 +48,9 @@ class ClientConnectionsManager(private val context: Context,
         // Attach a BleManager to this client connection
         // The nordicsemi library's BleServerManager manages the server-side connection,
         // but we create a BleManager to interact with the client
-        val manager = ConnectedClientBleManager(context, device)
+        val manager = ConnectedClientBleManager(context, device, serverSpec) { device, data ->
+            listener.onDataReceived(data.value ?: byteArrayOf())
+        }
         manager.useServer(serverManager)
         manager.attachClientConnection(device)
 
