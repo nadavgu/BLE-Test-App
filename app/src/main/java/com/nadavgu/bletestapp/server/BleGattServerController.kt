@@ -10,6 +10,8 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
 import com.nadavgu.bletestapp.BleRequirements
+import com.nadavgu.bletestapp.server.spec.BleServerSpec
+import com.nadavgu.bletestapp.server.spec.BleServiceSpec
 import java.util.UUID
 
 data class ConnectedClient(
@@ -125,7 +127,9 @@ class BleGattServerController(
         return try {
             Log.i(TAG, "startServer: Creating server manager with service UUID=$serviceUuid")
             // Create server manager
-            server = BleServer.open(context, serviceUuid, characteristicUuids, listener)
+            val spec = BleServerSpec(listOf(BleServiceSpec(serviceUuid,
+                characteristicUuids)))
+            server = BleServer.open(context, spec, listener)
 
             Log.d(TAG, "startServer: Server manager opened, starting advertising")
             
