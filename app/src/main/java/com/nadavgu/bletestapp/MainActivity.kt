@@ -23,6 +23,7 @@ import java.util.UUID
 import android.util.Log
 import com.nadavgu.bletestapp.server.BleGattServerController
 import com.nadavgu.bletestapp.server.BleServerListener
+import com.nadavgu.bletestapp.ServerSpeedCheckState
 
 class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServerListener, BleConnectionController.Listener {
 
@@ -62,6 +63,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
 
 
     private val receivedDataHistoryByClientServiceAndCharacteristic = mutableMapOf<String, MutableMap<String, MutableMap<String, StringBuilder>>>()
+    private val speedCheckStateByClient = mutableMapOf<String, ServerSpeedCheckState>()
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
@@ -780,23 +782,52 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
 
     override fun onDataReceived(clientDevice: BluetoothDevice, serviceUuid: String, characteristicUuid: String, data: ByteArray) {
         runOnUiThread {
-            val dataString = data.joinToString(" ") { "%02X".format(it) }
-            val clientMap = receivedDataHistoryByClientServiceAndCharacteristic.getOrPut(clientDevice.address) { mutableMapOf() }
-            val serviceMap = clientMap.getOrPut(serviceUuid) { mutableMapOf() }
-            val history = serviceMap.getOrPut(characteristicUuid) { StringBuilder() }
-            history.append("${System.currentTimeMillis()}: $dataString\n")
-            if (history.length > 1000) {
-                history.delete(0, history.length - 1000)
+            val speedCheckServiceUuid = BleGattServerController.SPEED_CHECK_SERVICE_UUID.toString()
+            val speedCheckCharacteristicUuid = BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID.toString()
+            
+            // Check if this is speed check data
+            if (serviceUuid == speedCheckServiceUuid && characteristicUuid == speedCheckCharacteristicUuid) {
+                // Update speed check state instead of storing data
+                val currentState = speedCheckStateByClient.getOrPut(clientDevice.address) {
+                    ServerSpeedCheckState(
+                        isRunning = true,
+                        startTime = System.currentTimeMillis()
+                    )
+                }
+                val newState = currentState.copy(
+                    isRunning = true,
+                    packetsReceived = currentState.packetsReceived + 1,
+                    bytesReceived = currentState.bytesReceived + data.size,
+                    lastUpdateTime = System.currentTimeMillis(),
+                    startTime = currentState.startTime ?: System.currentTimeMillis()
+                )
+                speedCheckStateByClient[clientDevice.address] = newState
+            } else {
+                // Store regular data (not speed check)
+                val dataString = data.joinToString(" ") { "%02X".format(it) }
+                val clientMap = receivedDataHistoryByClientServiceAndCharacteristic.getOrPut(clientDevice.address) { mutableMapOf() }
+                val serviceMap = clientMap.getOrPut(serviceUuid) { mutableMapOf() }
+                val history = serviceMap.getOrPut(characteristicUuid) { StringBuilder() }
+                history.append("${System.currentTimeMillis()}: $dataString\n")
+                if (history.length > 1000) {
+                    history.delete(0, history.length - 1000)
+                }
             }
             
             // Convert nested map to Map<String, Map<String, Map<String, String>>> for state
+            // Filter out speed check service/characteristic
             val dataReceivedByClientServiceAndCharacteristic = receivedDataHistoryByClientServiceAndCharacteristic.mapValues { clientMap ->
-                clientMap.value.mapValues { serviceMap ->
+                clientMap.value.filterKeys { it != speedCheckServiceUuid }.mapValues { serviceMap ->
                     serviceMap.value.mapValues { it.value.toString() }
                 }
             }
+            
+            // Convert speed check state map
+            val speedCheckStateByClientMap = speedCheckStateByClient.toMap()
+            
             gattServerState = gattServerState.copy(
-                dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic
+                dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic,
+                speedCheckStateByClient = speedCheckStateByClientMap
             )
         }
     }
@@ -808,11 +839,16 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
         val connectedClients = gattServerController.getConnectedClients()
         
         // Convert nested map to Map<String, Map<String, Map<String, String>>> for state
+        // Filter out speed check service/characteristic
+        val speedCheckServiceUuid = BleGattServerController.SPEED_CHECK_SERVICE_UUID.toString()
         val dataReceivedByClientServiceAndCharacteristic = receivedDataHistoryByClientServiceAndCharacteristic.mapValues { clientMap ->
-            clientMap.value.mapValues { serviceMap ->
+            clientMap.value.filterKeys { it != speedCheckServiceUuid }.mapValues { serviceMap ->
                 serviceMap.value.mapValues { it.value.toString() }
             }
         }
+        
+        // Convert speed check state map
+        val speedCheckStateByClientMap = speedCheckStateByClient.toMap()
         
         gattServerState = gattServerState.copy(
             isRunning = running,
@@ -820,6 +856,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
             connectedClientCount = clientCount,
             connectedClients = connectedClients,
             dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic,
+            speedCheckStateByClient = speedCheckStateByClientMap,
             speedCheckEnabled = gattServerController.getSpeedCheckEnabled(),
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,

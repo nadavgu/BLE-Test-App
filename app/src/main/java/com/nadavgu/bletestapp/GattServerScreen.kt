@@ -30,6 +30,14 @@ data class CharacteristicEntry(
     val uuidError: String? = null
 )
 
+data class ServerSpeedCheckState(
+    val isRunning: Boolean = false,
+    val packetsReceived: Int = 0,
+    val bytesReceived: Long = 0,
+    val startTime: Long? = null,
+    val lastUpdateTime: Long? = null
+)
+
 data class GattServerState(
     val isRunning: Boolean = false,
     val serverAddress: String? = null,
@@ -40,6 +48,7 @@ data class GattServerState(
     val manufacturerId: String = "",
     val manufacturerData: String = "",
     val dataReceivedByClientServiceAndCharacteristic: Map<String, Map<String, Map<String, String>>> = emptyMap(),
+    val speedCheckStateByClient: Map<String, ServerSpeedCheckState> = emptyMap(),
     val uuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null,
@@ -392,6 +401,7 @@ fun GattServerScreen(
                     state.connectedClients.forEach { client ->
                         val isExpanded = expandedClients.contains(client.address)
                         val clientDataByServiceAndCharacteristic = state.dataReceivedByClientServiceAndCharacteristic[client.address] ?: emptyMap()
+                        val speedCheckState = state.speedCheckStateByClient[client.address]
                         
                         Card(
                             modifier = Modifier
@@ -429,6 +439,15 @@ fun GattServerScreen(
                                             fontFamily = FontFamily.Monospace,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        // Show speed check status in header if active
+                                        if (speedCheckState?.isRunning == true) {
+                                            Text(
+                                                text = "Speed Check: ${speedCheckState.packetsReceived} packets, ${String.format("%.2f", speedCheckState.bytesReceived / 1024.0)} KB",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                        }
                                     }
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -451,6 +470,69 @@ fun GattServerScreen(
                                             modifier = Modifier.padding(bottom = 12.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant
                                         )
+                                        
+                                        // Speed Check section (if active)
+                                        if (speedCheckState != null && speedCheckState.isRunning) {
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(bottom = 16.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(16.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Speed Check in Progress",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    )
+                                                    
+                                                    val elapsedTime = if (speedCheckState.startTime != null) {
+                                                        ((speedCheckState.lastUpdateTime ?: System.currentTimeMillis()) - speedCheckState.startTime) / 1000.0
+                                                    } else {
+                                                        0.0
+                                                    }
+                                                    
+                                                    val throughput = if (elapsedTime > 0) {
+                                                        (speedCheckState.bytesReceived * 8.0) / elapsedTime / 1000.0 // Kbps
+                                                    } else {
+                                                        0.0
+                                                    }
+                                                    
+                                                    Text(
+                                                        text = "Packets: ${speedCheckState.packetsReceived}",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(bottom = 4.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Bytes: ${String.format("%.2f", speedCheckState.bytesReceived / 1024.0)} KB",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(bottom = 4.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Time: ${String.format("%.2f", elapsedTime)}s",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(bottom = 4.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Throughput: ${String.format("%.2f", throughput)} Kbps",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                    )
+                                                }
+                                            }
+                                        }
                                         
                                         // Received Data section
                                         Text(
