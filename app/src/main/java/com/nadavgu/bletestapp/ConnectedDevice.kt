@@ -20,7 +20,8 @@ data class ConnectedDevice(
     val isConnecting: Boolean = false,
     val isDisconnected: Boolean = false,
     val disconnectionReason: Int? = null,
-    val services: List<GattService> = emptyList()
+    val services: List<GattService> = emptyList(),
+    val phy: String? = null // PHY information (e.g., "LE 1M", "LE 2M", "LE Coded")
 )
 
 

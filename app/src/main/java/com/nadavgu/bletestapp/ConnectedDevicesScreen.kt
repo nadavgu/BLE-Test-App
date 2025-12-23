@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -26,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -60,6 +62,7 @@ fun ConnectedDevicesScreen(
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
     onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
+    onRefreshPhy: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -305,6 +308,7 @@ fun ConnectedDevicesScreen(
                         onDisconnect = onDisconnect,
                         onRemove = onRemove,
                         onWriteCharacteristic = onWriteCharacteristic,
+                        onRefreshPhy = onRefreshPhy,
                         totalBytesMB = totalBytesMB.value.toDoubleOrNull() ?: 1.0,
                         useWriteWithResponse = useWriteWithResponse.value
                     )
@@ -320,6 +324,7 @@ private fun ConnectedDeviceItem(
     onDisconnect: (String) -> Unit,
     onRemove: (String) -> Unit,
     onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
+    onRefreshPhy: (String) -> Unit,
     totalBytesMB: Double = 1.0,
     useWriteWithResponse: Boolean = false
 ) {
@@ -350,11 +355,34 @@ private fun ConnectedDeviceItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                text = device.address,
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                maxLines = 1
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = device.address,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    maxLines = 1
+                )
+                if (device.phy != null) {
+                    Text(
+                        text = " • ${device.phy}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { onRefreshPhy(device.address) },
+                    enabled = !device.isConnecting && !device.isDisconnected
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh PHY"
+                    )
+                }
+            }
             Text(
                 text = statusText,
                 style = MaterialTheme.typography.bodyMedium,

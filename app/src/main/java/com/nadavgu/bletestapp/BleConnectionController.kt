@@ -14,6 +14,25 @@ import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
 
+private fun formatPhy(txPhy: Int, rxPhy: Int): String {
+    val txPhyStr = phyToString(txPhy)
+    val rxPhyStr = phyToString(rxPhy)
+    return if (txPhyStr == rxPhyStr) {
+        txPhyStr
+    } else {
+        "$txPhyStr / $rxPhyStr"
+    }
+}
+
+private fun phyToString(phy: Int): String {
+    return when (phy) {
+        BluetoothDevice.PHY_LE_1M -> "LE 1M"
+        BluetoothDevice.PHY_LE_2M -> "LE 2M"
+        BluetoothDevice.PHY_LE_CODED -> "LE Coded"
+        else -> "Unknown"
+    }
+}
+
 class BleConnectionController(
     private val context: Context,
     private val listener: Listener
@@ -35,6 +54,7 @@ class BleConnectionController(
     private inner class MyBleManager(context: Context) : BleManager(context) {
         @SuppressLint("MissingPermission")
         private var cachedServices: List<BluetoothGattService> = emptyList()
+        private var currentPhy: String? = null
         
         override fun getMinLogPriority(): Int = Log.DEBUG
 
@@ -51,8 +71,38 @@ class BleConnectionController(
             Log.d(TAG, "isRequiredServiceSupported: Cached ${cachedServices.size} services")
             return true
         }
+        
+        @SuppressLint("MissingPermission")
+        private fun updatePhyFromCallback(txPhy: Int, rxPhy: Int, address: String) {
+            currentPhy = formatPhy(txPhy, rxPhy)
+            Log.d(TAG, "updatePhyFromCallback: PHY=$currentPhy for $address")
+            // Update the device's PHY in connectedDevices
+            val existingDevice = connectedDevices[address]
+            if (existingDevice != null) {
+                connectedDevices[address] = existingDevice.copy(phy = currentPhy)
+                listener.onDeviceConnected(address, existingDevice.name)
+            }
+        }
 
         fun getDiscoveredServices() = cachedServices
+        
+        @SuppressLint("MissingPermission")
+        fun getPhy(): String? {
+            return currentPhy
+        }
+        
+        @SuppressLint("MissingPermission")
+        fun readPhyValue() {
+            try {
+                readPhy()
+                    .with { device, txPhy, rxPhy ->
+                        updatePhyFromCallback(txPhy, rxPhy, device.address)
+                    }
+                    .enqueue()
+            } catch (e: Exception) {
+                Log.w(TAG, "readPhyValue: Failed to read PHY", e)
+            }
+        }
         
         fun writeCharacteristic(
             serviceUuid: UUID,
@@ -115,7 +165,8 @@ class BleConnectionController(
                 name = deviceName,
                 isConnecting = true,
                 isDisconnected = false,
-                disconnectionReason = null
+                disconnectionReason = null,
+                phy = null
             )
             
             val manager = MyBleManager(context)
@@ -158,15 +209,22 @@ class BleConnectionController(
                     // Services are automatically discovered when device is ready
                     // Extract them directly from the manager
                     val services = extractServices(device.address)
+                    val manager = connections[device.address] as? MyBleManager
+                    
+                    // Read PHY information (device is now in connectedDevices map)
+                    manager?.readPhyValue()
+                    val phy = manager?.getPhy()
+                    
                     connectedDevices[device.address] = ConnectedDevice(
                         address = device.address,
                         name = name,
                         isConnecting = false,
                         isDisconnected = false,
                         disconnectionReason = null,
-                        services = services
+                        services = services,
+                        phy = phy
                     )
-                    Log.d(TAG, "onDeviceReady: Found ${services.size} services for ${device.address}")
+                    Log.d(TAG, "onDeviceReady: Found ${services.size} services for ${device.address}, PHY=$phy")
                     listener.onDeviceConnected(device.address, name)
                 }
                 
@@ -256,6 +314,20 @@ class BleConnectionController(
             Log.d(TAG, "removeDisconnectedDevice: Removing disconnected device $address")
             connectedDevices.remove(address)
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun readPhy(address: String): Boolean {
+        if (!bleRequirements.hasAllPermissions()) {
+            Log.w(TAG, "readPhy: Missing permissions")
+            return false
+        }
+        val manager = connections[address] as? MyBleManager ?: run {
+            Log.w(TAG, "readPhy: No connection found for $address")
+            return false
+        }
+        manager.readPhyValue()
+        return true
     }
 
     fun getConnectedDevices(): List<ConnectedDevice> {

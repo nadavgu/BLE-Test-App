@@ -193,6 +193,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                             onWriteCharacteristic = { deviceAddress, serviceUuid, characteristicUuid, data, writeType ->
                                 Log.d(TAG, "onWriteCharacteristic: Writing to $deviceAddress, service=$serviceUuid, characteristic=$characteristicUuid, data size=${data.size}, writeType=$writeType")
                                 connectionController.writeCharacteristic(deviceAddress, serviceUuid, characteristicUuid, data, writeType)
+                            },
+                            onRefreshPhy = { address ->
+                                connectionController.readPhy(address)
                             }
                         )
                     },
