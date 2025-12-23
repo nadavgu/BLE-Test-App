@@ -40,6 +40,7 @@ class BleConnectionController(
     private val bleRequirements = BleRequirements(context)
     private val connections = mutableMapOf<String, MyBleManager>()
     private val connectedDevices = mutableMapOf<String, ConnectedDevice>()
+    private var preferredPhy: Int? = null // Global preferred PHY for all new connections
     
     companion object {
         private const val TAG = "BleConnectionController"
@@ -111,6 +112,16 @@ class BleConnectionController(
                 Log.d(TAG, "requestMtuValue: Requested MTU=$mtu")
             } catch (e: Exception) {
                 Log.w(TAG, "requestMtuValue: Failed to request MTU", e)
+            }
+        }
+        
+        @SuppressLint("MissingPermission")
+        fun setPreferredPhyValue(txPhy: Int, rxPhy: Int) {
+            try {
+                setPreferredPhy(txPhy, rxPhy, BluetoothDevice.PHY_OPTION_NO_PREFERRED).enqueue()
+                Log.d(TAG, "setPreferredPhyValue: Set preferred PHY tx=$txPhy, rx=$rxPhy")
+            } catch (e: Exception) {
+                Log.w(TAG, "setPreferredPhyValue: Failed to set preferred PHY", e)
             }
         }
         
@@ -223,6 +234,11 @@ class BleConnectionController(
                     
                     // Request maximum MTU (517 bytes)
                     manager?.requestMtuValue(517)
+                    
+                    // Apply preferred PHY if set
+                    preferredPhy?.let { phyValue ->
+                        manager?.setPreferredPhyValue(phyValue, phyValue)
+                    }
                     
                     // Read PHY information (device is now in connectedDevices map)
                     manager?.readPhyValue()
@@ -341,6 +357,38 @@ class BleConnectionController(
         }
         manager.readPhyValue()
         return true
+    }
+    
+    @SuppressLint("MissingPermission")
+    fun setPreferredPhy(address: String, txPhy: Int, rxPhy: Int): Boolean {
+        if (!bleRequirements.hasAllPermissions()) {
+            Log.w(TAG, "setPreferredPhy: Missing permissions")
+            return false
+        }
+        val manager = connections[address] as? MyBleManager ?: run {
+            Log.w(TAG, "setPreferredPhy: No connection found for $address")
+            return false
+        }
+        manager.setPreferredPhyValue(txPhy, rxPhy)
+        return true
+    }
+    
+    /**
+     * Sets the preferred PHY for all new connections.
+     * This will be applied automatically when devices connect.
+     */
+    fun setGlobalPreferredPhy(txPhy: Int, rxPhy: Int) {
+        preferredPhy = txPhy // Store for future connections
+        Log.d(TAG, "setGlobalPreferredPhy: Set global preferred PHY tx=$txPhy, rx=$rxPhy")
+        
+        // Apply to all currently connected devices
+        connections.forEach { (address, manager) ->
+            try {
+                manager.setPreferredPhyValue(txPhy, rxPhy)
+            } catch (e: Exception) {
+                Log.w(TAG, "setGlobalPreferredPhy: Failed to set PHY for $address", e)
+            }
+        }
     }
 
     fun getConnectedDevices(): List<ConnectedDevice> {

@@ -196,6 +196,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                             },
                             onRefreshPhy = { address ->
                                 connectionController.readPhy(address)
+                            },
+                            onSetGlobalPreferredPhy = { txPhy, rxPhy ->
+                                connectionController.setGlobalPreferredPhy(txPhy, rxPhy)
                             }
                         )
                     },

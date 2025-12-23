@@ -46,6 +46,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.bluetooth.BluetoothDevice
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.OutlinedTextField
 import com.nadavgu.bletestapp.server.BleGattServerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -63,6 +66,7 @@ fun ConnectedDevicesScreen(
     onRemove: (String) -> Unit,
     onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
     onRefreshPhy: (String) -> Unit,
+    onSetGlobalPreferredPhy: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -73,6 +77,7 @@ fun ConnectedDevicesScreen(
     val totalBytesMBError = remember { mutableStateOf<String?>(null) }
     // Default to WRITE_TYPE_NO_RESPONSE (faster, no acknowledgment)
     val useWriteWithResponse = remember { mutableStateOf(false) }
+    val showPhyOptions = remember { mutableStateOf(false) }
 
     fun validateAndConnect() {
         val text = addressInput.value.trim()
@@ -152,6 +157,55 @@ fun ConnectedDevicesScreen(
             }
         }
 
+        // PHY Options Section (always visible)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            colors = CardDefaults.cardColors()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPhyOptions.value = !showPhyOptions.value },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "PHY Options",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = if (showPhyOptions.value) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (showPhyOptions.value) "Collapse" else "Expand"
+                    )
+                }
+                
+                AnimatedVisibility(
+                    visible = showPhyOptions.value,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                    ) {
+                        PhySelectionSection(
+                            onSetGlobalPreferredPhy = onSetGlobalPreferredPhy,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+        
         if (devices.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -871,6 +925,57 @@ private fun performSpeedCheck(
                 isRunning = false,
                 error = e.message ?: "Unknown error"
             )
+        }
+    }
+}
+
+@Composable
+private fun PhySelectionSection(
+    onSetGlobalPreferredPhy: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val phyOptions = listOf(
+        "LE 1M" to BluetoothDevice.PHY_LE_1M,
+        "LE 2M" to BluetoothDevice.PHY_LE_2M,
+        "LE Coded" to BluetoothDevice.PHY_LE_CODED
+    )
+    val selectedPhy = remember { mutableStateOf(phyOptions[0].second) }
+    
+    Column(modifier = modifier) {
+        Text(
+            text = "This setting will apply to all new connections",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        // PHY selection
+        Text(
+            text = "Preferred PHY",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            phyOptions.forEach { (label, phyValue) ->
+                val isSelected = selectedPhy.value == phyValue
+                TextButton(
+                    onClick = {
+                        selectedPhy.value = phyValue
+                        onSetGlobalPreferredPhy(phyValue, phyValue)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
         }
     }
 }
