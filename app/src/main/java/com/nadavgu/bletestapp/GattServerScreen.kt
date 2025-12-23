@@ -502,7 +502,7 @@ fun GattServerScreen(
                                                     }
                                                     
                                                     val throughput = if (elapsedTime > 0) {
-                                                        (speedCheckState.bytesReceived * 8.0) / elapsedTime / 1000.0 // Kbps
+                                                        (speedCheckState.bytesReceived.toDouble()) / elapsedTime / 1024.0 // KB/s
                                                     } else {
                                                         0.0
                                                     }
@@ -540,7 +540,7 @@ fun GattServerScreen(
                                                         modifier = Modifier.padding(bottom = 4.dp)
                                                     )
                                                     Text(
-                                                        text = "Throughput: ${String.format("%.2f", throughput)} Kbps",
+                                                        text = "Throughput: ${String.format("%.2f", throughput)} KB/s",
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         fontWeight = FontWeight.Medium,
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer
