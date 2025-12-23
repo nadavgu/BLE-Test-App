@@ -104,6 +104,16 @@ class BleConnectionController(
             }
         }
         
+        @SuppressLint("MissingPermission")
+        fun requestMtuValue(mtu: Int) {
+            try {
+                requestMtu(mtu).enqueue()
+                Log.d(TAG, "requestMtuValue: Requested MTU=$mtu")
+            } catch (e: Exception) {
+                Log.w(TAG, "requestMtuValue: Failed to request MTU", e)
+            }
+        }
+        
         fun writeCharacteristic(
             serviceUuid: UUID,
             characteristicUuid: UUID,
@@ -210,6 +220,9 @@ class BleConnectionController(
                     // Extract them directly from the manager
                     val services = extractServices(device.address)
                     val manager = connections[device.address] as? MyBleManager
+                    
+                    // Request maximum MTU (517 bytes)
+                    manager?.requestMtuValue(517)
                     
                     // Read PHY information (device is now in connectedDevices map)
                     manager?.readPhyValue()
