@@ -53,7 +53,8 @@ data class GattServerState(
     val uuidError: String? = null,
     val manufacturerIdError: String? = null,
     val manufacturerDataError: String? = null,
-    val speedCheckEnabled: Boolean = true
+    val speedCheckEnabled: Boolean = true,
+    val speedCheckCharacteristicCount: Int = 1
 )
 
 @Composable
@@ -66,6 +67,7 @@ fun GattServerScreen(
     onManufacturerIdChange: (String) -> Unit,
     onManufacturerDataChange: (String) -> Unit,
     onSpeedCheckToggle: (Boolean) -> Unit,
+    onSpeedCheckCharacteristicCountChange: (Int) -> Unit,
     onToggleServer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -237,6 +239,45 @@ fun GattServerScreen(
                                 onCheckedChange = onSpeedCheckToggle,
                                 enabled = !state.isRunning
                             )
+                        }
+                        
+                        // Speed Check Characteristic Count (only shown when enabled)
+                        if (state.speedCheckEnabled) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Number of Characteristics",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Number of characteristics in speed check service (1-10)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = state.speedCheckCharacteristicCount.toString(),
+                                    onValueChange = { value ->
+                                        val intValue = value.toIntOrNull()
+                                        if (intValue != null && intValue >= 1 && intValue <= 10) {
+                                            onSpeedCheckCharacteristicCountChange(intValue)
+                                        }
+                                    },
+                                    enabled = !state.isRunning,
+                                    modifier = Modifier.width(80.dp),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 14.sp
+                                    )
+                                )
+                            }
                         }
                         
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))

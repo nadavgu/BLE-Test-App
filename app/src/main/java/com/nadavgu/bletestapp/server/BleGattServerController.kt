@@ -30,6 +30,22 @@ class BleGattServerController(
         val SPEED_CHECK_SERVICE_UUID = UUID.fromString("0000FF00-0000-1000-8000-00805F9B34FB")
         val SPEED_CHECK_CHARACTERISTIC_UUID = UUID.fromString("0000FF01-0000-1000-8000-00805F9B34FB")
         
+        /**
+         * Generates a UUID for a speed check characteristic at the given index
+         * Format: 0000FF01-0000-1000-8000-00805F9B34FB (base for index 0)
+         * For index > 0, the first part is incremented: 0000FF02, 0000FF03, etc.
+         */
+        fun getSpeedCheckCharacteristicUuid(index: Int): UUID {
+            if (index == 0) {
+                return SPEED_CHECK_CHARACTERISTIC_UUID
+            }
+            // For index > 0, increment the last two hex digits of the first part
+            val baseValue = 0xFF01
+            val newValue = baseValue + index
+            val newUuid = String.format("0000%04X-0000-1000-8000-00805F9B34FB", newValue)
+            return UUID.fromString(newUuid)
+        }
+        
         // Speed check control message protocol
         // Control message format: [0xFF (magic byte), 4 bytes for total packets (Int, little-endian)]
         private const val SPEED_CHECK_CONTROL_MAGIC: Byte = 0xFF.toByte()
@@ -81,6 +97,9 @@ class BleGattServerController(
     
     // Speed check service toggle (hardcoded, cannot be removed)
     private var speedCheckEnabled: Boolean = true
+    
+    // Number of characteristics in the speed check service (configurable)
+    private var speedCheckCharacteristicCount: Int = 1
 
     private var server: BleServer? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -155,6 +174,22 @@ class BleGattServerController(
     }
     
     fun getSpeedCheckEnabled(): Boolean = speedCheckEnabled
+    
+    fun setSpeedCheckCharacteristicCount(count: Int): Boolean {
+        if (isRunning) {
+            Log.w(TAG, "setSpeedCheckCharacteristicCount: Cannot change count while server is running")
+            return false
+        }
+        if (count < 1 || count > 10) {
+            Log.w(TAG, "setSpeedCheckCharacteristicCount: Count must be between 1 and 10, got $count")
+            return false
+        }
+        Log.d(TAG, "setSpeedCheckCharacteristicCount: Setting speed check characteristic count to $count")
+        this.speedCheckCharacteristicCount = count
+        return true
+    }
+    
+    fun getSpeedCheckCharacteristicCount(): Int = speedCheckCharacteristicCount
 
     @SuppressLint("MissingPermission")
     fun startServer(): Boolean {
@@ -189,10 +224,13 @@ class BleGattServerController(
             
             // Add speed check service if enabled
             if (speedCheckEnabled) {
-                Log.d(TAG, "startServer: Adding speed check service")
+                Log.d(TAG, "startServer: Adding speed check service with $speedCheckCharacteristicCount characteristics")
+                val speedCheckCharacteristics = (0 until speedCheckCharacteristicCount).map { index ->
+                    getSpeedCheckCharacteristicUuid(index)
+                }
                 services.add(BleServiceSpec(
                     SPEED_CHECK_SERVICE_UUID,
-                    listOf(SPEED_CHECK_CHARACTERISTIC_UUID)
+                    speedCheckCharacteristics
                 ))
             }
             

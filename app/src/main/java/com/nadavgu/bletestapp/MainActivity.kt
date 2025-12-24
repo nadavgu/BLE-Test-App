@@ -123,7 +123,8 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
             },
             manufacturerId = gattServerController.getManufacturerId()?.let { "0x%04X".format(it) } ?: "0x004C",
             manufacturerData = gattServerController.getManufacturerData()?.joinToString(" ") { "%02X".format(it) } ?: "01 02 03",
-            speedCheckEnabled = gattServerController.getSpeedCheckEnabled()
+            speedCheckEnabled = gattServerController.getSpeedCheckEnabled(),
+            speedCheckCharacteristicCount = gattServerController.getSpeedCheckCharacteristicCount()
         )
         
         setContent {
@@ -265,6 +266,13 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                                         if (gattServerController.setSpeedCheckEnabled(enabled)) {
                                             gattServerState = gattServerState.copy(
                                                 speedCheckEnabled = enabled
+                                            )
+                                        }
+                                    },
+                                    onSpeedCheckCharacteristicCountChange = { count ->
+                                        if (gattServerController.setSpeedCheckCharacteristicCount(count)) {
+                                            gattServerState = gattServerState.copy(
+                                                speedCheckCharacteristicCount = count
                                             )
                                         }
                                     },
@@ -896,6 +904,7 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
             dataReceivedByClientServiceAndCharacteristic = dataReceivedByClientServiceAndCharacteristic,
             speedCheckStateByClient = speedCheckStateByClientMap,
             speedCheckEnabled = gattServerController.getSpeedCheckEnabled(),
+            speedCheckCharacteristicCount = gattServerController.getSpeedCheckCharacteristicCount(),
             // Clear errors when server state changes
             uuidError = if (!running) null else gattServerState.uuidError,
             characteristics = if (!running) gattServerState.characteristics else gattServerState.characteristics.map { it.copy(uuidError = null) },
