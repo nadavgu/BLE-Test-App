@@ -73,7 +73,7 @@ fun ConnectedDevicesScreen(
     val addressInput = remember { mutableStateOf("") }
     val addressError = remember { mutableStateOf<String?>(null) }
     val showSpeedCheckOptions = remember { mutableStateOf(false) }
-    val totalBytesMB = remember { mutableStateOf("1") }
+    val totalBytesMB = remember { mutableStateOf("2") }
     val totalBytesMBError = remember { mutableStateOf<String?>(null) }
     // Default to WRITE_TYPE_NO_RESPONSE (faster, no acknowledgment)
     val useWriteWithResponse = remember { mutableStateOf(false) }
