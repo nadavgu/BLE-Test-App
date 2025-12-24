@@ -809,10 +809,9 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
     override fun onDataReceived(clientDevice: BluetoothDevice, serviceUuid: String, characteristicUuid: String, data: ByteArray) {
         runOnUiThread {
             val speedCheckServiceUuid = BleGattServerController.SPEED_CHECK_SERVICE_UUID.toString()
-            val speedCheckCharacteristicUuid = BleGattServerController.SPEED_CHECK_CHARACTERISTIC_UUID.toString()
             
-            // Check if this is speed check data
-            if (serviceUuid == speedCheckServiceUuid && characteristicUuid == speedCheckCharacteristicUuid) {
+            // Check if this is speed check data (any characteristic in the speed check service)
+            if (serviceUuid == speedCheckServiceUuid) {
                 // Check if this is a control message (speed check start)
                 val totalPackets = BleGattServerController.parseSpeedCheckControlMessage(data)
                 if (totalPackets != null) {
