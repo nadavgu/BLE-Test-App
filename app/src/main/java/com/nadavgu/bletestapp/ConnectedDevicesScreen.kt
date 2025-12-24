@@ -35,6 +35,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,17 +68,28 @@ fun ConnectedDevicesScreen(
     onWriteCharacteristic: (String, UUID, UUID, ByteArray, Int) -> Boolean,
     onRefreshPhy: (String) -> Unit,
     onSetGlobalPreferredPhy: (Int, Int) -> Unit,
+    speedCheckTotalBytesMB: String = "2",
+    speedCheckUseWriteWithResponse: Boolean = false,
+    onSpeedCheckTotalBytesMBChange: (String) -> Unit = {},
+    onSpeedCheckUseWriteWithResponseChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val addressInput = remember { mutableStateOf("") }
     val addressError = remember { mutableStateOf<String?>(null) }
     val showSpeedCheckOptions = remember { mutableStateOf(false) }
-    val totalBytesMB = remember { mutableStateOf("2") }
+    val totalBytesMB = remember { mutableStateOf(speedCheckTotalBytesMB) }
     val totalBytesMBError = remember { mutableStateOf<String?>(null) }
-    // Default to WRITE_TYPE_NO_RESPONSE (faster, no acknowledgment)
-    val useWriteWithResponse = remember { mutableStateOf(false) }
+    val useWriteWithResponse = remember { mutableStateOf(speedCheckUseWriteWithResponse) }
     val showPhyOptions = remember { mutableStateOf(false) }
+    
+    // Sync with external state when it changes
+    LaunchedEffect(speedCheckTotalBytesMB) {
+        totalBytesMB.value = speedCheckTotalBytesMB
+    }
+    LaunchedEffect(speedCheckUseWriteWithResponse) {
+        useWriteWithResponse.value = speedCheckUseWriteWithResponse
+    }
 
     fun validateAndConnect() {
         val text = addressInput.value.trim()
@@ -290,6 +302,9 @@ fun ConnectedDevicesScreen(
                                                 totalBytesMBError.value = "Must be greater than 0"
                                             } else if (doubleValue > 100) {
                                                 totalBytesMBError.value = "Maximum 100 MB recommended"
+                                            } else {
+                                                // Only update external state if valid
+                                                onSpeedCheckTotalBytesMBChange(value)
                                             }
                                         },
                                         label = { Text("Total bytes in megabytes") },
@@ -347,7 +362,10 @@ fun ConnectedDevicesScreen(
                                         }
                                         Switch(
                                             checked = useWriteWithResponse.value,
-                                            onCheckedChange = { useWriteWithResponse.value = it }
+                                            onCheckedChange = { 
+                                                useWriteWithResponse.value = it
+                                                onSpeedCheckUseWriteWithResponseChange(it)
+                                            }
                                         )
                                     }
                                 }

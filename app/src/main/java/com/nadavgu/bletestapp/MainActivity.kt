@@ -64,6 +64,10 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
 
     private val receivedDataHistoryByClientServiceAndCharacteristic = mutableMapOf<String, MutableMap<String, MutableMap<String, StringBuilder>>>()
     private val speedCheckStateByClient = mutableMapOf<String, ServerSpeedCheckState>()
+    
+    // Persistent speed check options (retained across connections)
+    private var speedCheckTotalBytesMB = "2"
+    private var speedCheckUseWriteWithResponse = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingSort = false
@@ -199,6 +203,14 @@ class MainActivity : AppCompatActivity(), BleScannerController.Listener, BleServ
                             },
                             onSetGlobalPreferredPhy = { txPhy, rxPhy ->
                                 connectionController.setGlobalPreferredPhy(txPhy, rxPhy)
+                            },
+                            speedCheckTotalBytesMB = speedCheckTotalBytesMB,
+                            speedCheckUseWriteWithResponse = speedCheckUseWriteWithResponse,
+                            onSpeedCheckTotalBytesMBChange = { value ->
+                                speedCheckTotalBytesMB = value
+                            },
+                            onSpeedCheckUseWriteWithResponseChange = { value ->
+                                speedCheckUseWriteWithResponse = value
                             }
                         )
                     },

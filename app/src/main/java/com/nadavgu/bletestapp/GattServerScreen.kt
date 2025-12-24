@@ -608,13 +608,13 @@ fun GattServerScreen(
                                                                     modifier = Modifier.padding(start = 8.dp)
                                                                 )
                                                             } else {
-                                                                Text(
+                Text(
                                                                     text = data,
-                                                                    style = MaterialTheme.typography.bodySmall,
-                                                                    fontFamily = FontFamily.Monospace,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
                                                                         .heightIn(min = 40.dp)
                                                                         .padding(start = 8.dp)
                                                                 )
